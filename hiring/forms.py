@@ -1,7 +1,7 @@
 from django import forms
 from django.db.models import Q
 
-from hiring.models import Candidate, Skill
+from hiring.models import Candidate, JobOpening, Skill
 
 
 class SkillForm(forms.ModelForm):
@@ -39,6 +39,13 @@ class CandidateForm(forms.ModelForm):
         if duplicates.exists():
             raise forms.ValidationError("A candidate with this email already exists.")
         return email
+
+
+class JobOpeningForm(forms.ModelForm):
+    class Meta:
+        model = JobOpening
+        fields = ["title", "department", "location", "employment_type", "description", "skills"]
+        widgets = {"skills": forms.CheckboxSelectMultiple(attrs={"class": "checkbox checkbox-sm"})}
 
 
 class CandidateFilterForm(forms.Form):

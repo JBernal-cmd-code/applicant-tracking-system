@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}{% if job %}Edit job opening{% else %}Add job opening{% endif %}{% endblock %}
+
+{% block content %}
+  <h1 class="text-2xl font-semibold">{% if job %}Edit {{ job }}{% else %}Add job opening{% endif %}</h1>
+  <div class="card bg-base-100 shadow-sm mt-6 max-w-2xl">
+    <form method="post" class="card-body gap-4" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div role="alert" class="alert alert-error text-sm">{{ form.non_field_errors|join:" " }}</div>
+      {% endif %}
+      {% for field in form %}
+        <div class="fieldset">
+          <label for="{{ field.id_for_label }}" class="fieldset-legend">{{ field.label }}{% if not field.field.required %} <span class="font-normal text-base-content/60">(optional)</span>{% endif %}</label>
+          {% if field.widget_type == "select" %}
+            <select name="{{ field.html_name }}" id="{{ field.id_for_label }}" class="select w-full{% if field.errors %} select-error{% endif %}" {% if field.field.required %}required{% endif %}>
+              {% for value, label in field.field.choices %}
+                <option value="{{ value }}" {% if field.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          {% elif field.widget_type == "textarea" %}
+            <textarea name="{{ field.html_name }}" id="{{ field.id_for_label }}" rows="6" class="textarea w-full{% if field.errors %} textarea-error{% endif %}" {% if field.field.required %}required{% endif %}>{{ field.value|default:'' }}</textarea>
+          {% elif field.widget_type == "checkboxselectmultiple" %}
+            {% if field.field.queryset.exists %}
+              <div class="flex flex-wrap gap-x-6 gap-y-2">
+                {% for checkbox in field %}
+                  <label class="label cursor-pointer gap-2">
+                    {{ checkbox.tag }}
+                    <span class="text-base-content">{{ checkbox.choice_label }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="text-sm text-base-content/60">No skills yet. <a href="{% url 'hiring:skill_create' %}" class="link">Add one</a> first.</p>
+            {% endif %}
+          {% else %}
+            <input type="{{ field.widget_type }}" name="{{ field.html_name }}" id="{{ field.id_for_label }}" class="input w-full{% if field.errors %} input-error{% endif %}" {% if field.field.max_length %}maxlength="{{ field.field.max_length }}"{% endif %} {% if field.field.required %}required{% endif %} {% if forloop.first %}autofocus{% endif %} value="{{ field.value|default:'' }}">
+          {% endif %}
+          {% for error in field.errors %}
+            <span class="text-error text-sm">{{ error }}</span>
+          {% endfor %}
+        </div>
+      {% endfor %}
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a href="{% if job %}{% url 'hiring:job_detail' job.pk %}{% else %}{% url 'hiring:job_list' %}{% endif %}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

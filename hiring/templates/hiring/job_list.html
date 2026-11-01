@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Job openings{% endblock %}
+
+{% block content %}
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-semibold">Job openings</h1>
+    <a href="{% url 'hiring:job_create' %}" class="btn btn-primary btn-sm">Add job opening</a>
+  </div>
+  <div class="card bg-base-100 shadow-sm mt-6">
+    <div class="card-body p-0">
+      {% if jobs %}
+        <table class="table">
+          <thead>
+            <tr><th>Title</th><th>Department</th><th>Location</th><th>Type</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for job in jobs %}
+              <tr>
+                <td class="font-medium"><a href="{% url 'hiring:job_detail' job.pk %}" class="link link-hover">{{ job.title }}</a></td>
+                <td>{{ job.department }}</td>
+                <td>{{ job.location }}</td>
+                <td>{{ job.get_employment_type_display }}</td>
+                <td>{% include "hiring/partials/job_status_badge.html" %}</td>
+                <td class="text-right"><a href="{% url 'hiring:job_edit' job.pk %}" class="btn btn-ghost btn-xs">Edit</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="p-6 text-base-content/60">No job openings yet.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

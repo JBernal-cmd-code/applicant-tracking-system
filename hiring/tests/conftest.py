@@ -1,8 +1,9 @@
 import itertools
 
 import pytest
+from django.utils import timezone
 
-from hiring.models import Candidate
+from hiring.models import Candidate, JobOpening
 
 STAFF_PASSWORD = "correct-horse-battery"
 
@@ -36,3 +37,32 @@ def make_candidate(db):
 @pytest.fixture
 def candidate(make_candidate):
     return make_candidate(first_name="Ada", last_name="Lovelace", email="ada@example.com")
+
+
+@pytest.fixture
+def make_job(db):
+    counter = itertools.count(1)
+
+    def make(skills=(), **fields):
+        n = next(counter)
+        fields.setdefault("title", f"Job {n}")
+        fields.setdefault("department", "Engineering")
+        fields.setdefault("location", "Remote")
+        fields.setdefault("employment_type", JobOpening.EmploymentType.FULL_TIME)
+        fields.setdefault("description", f"Description for job {n}.")
+        job = JobOpening.objects.create(**fields)
+        job.skills.set(skills)
+        return job
+
+    return make
+
+
+@pytest.fixture
+def open_job(make_job):
+    return make_job(title="Backend Developer")
+
+
+@pytest.fixture
+def closed_job(make_job):
+    # Phase 5 adds close(); until then a closed job is set up directly.
+    return make_job(title="Data Analyst", status=JobOpening.Status.CLOSED, closed_at=timezone.now())

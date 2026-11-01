@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.db.models import IntegerField, Value
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 
 from hiring.forms import SkillForm
@@ -7,8 +7,8 @@ from hiring.models import Skill
 
 
 def skill_list(request):
-    # Job openings arrive in Phase 4; this becomes Count("job_openings") then.
-    skills = Skill.objects.annotate(job_count=Value(0, output_field=IntegerField()))
+    # Meta.ordering is ignored on aggregated queries, so order explicitly.
+    skills = Skill.objects.annotate(job_count=Count("job_openings")).order_by("name")
     return render(request, "hiring/skill_list.html", {"skills": skills})
 
 

@@ -28,6 +28,30 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-01 — Phase 4: Job openings — create, edit, list and job page header (implement + TDD)
+
+### Prompts
+1. `/implement @prd/applicant-tracking-system.md @plans/applicant-tracking-system.md implement Phase 4. Show me the TDD candidates to approve first, then go through RED and GREEN without stopping unless something unexpected happens.`
+2. Approved
+3. Everything passed in the browser, go ahead with PROMPTS.md, commit and push
+
+### Summary
+- **Outcome:** Phase 4 is built and committed.
+  - **Model:** `JobOpening` has employment type choices (Full-time, Part-time, Contract, Internship), a status (Open / Closed, default Open), a nullable closed-at time, created and updated times, and a many-to-many link to `Skill` with `related_name="job_openings"`. It's added in migration `0003_jobopening`.
+  - **Form:** `JobOpeningForm` is a ModelForm with the descriptive fields and skills, shown as checkboxes. It has no status or closed-at field.
+  - **Pages:** a basic job list, create and edit pages, and the job page at `/jobs/<pk>/`. The job page header shows the title, an Open/Closed badge, department, location, type, skill badges and an Edit button, with the description in a DaisyUI collapse. All are function views in `hiring/views/jobs.py`. There is no delete action.
+  - **Sidebar:** the Job openings link is live. A new context processor, `hiring/context_processors.py`, gives every page the open jobs, and the sidebar lists them under "Open jobs".
+  - **Skills list:** counts now come from `Count("job_openings")`.
+  - **Fixtures:** `conftest.py` gained `make_job`, `open_job` and `closed_job`. The closed job sets its status directly until Phase 5 adds `close()`.
+  - **Tests:** 21 new tests, 3 of them TDD, for 66 in total.
+    - Ruff, `manage.py check` and the migrations check are clean.
+    - The user confirmed the manual browser checks.
+- **Deviations:** none. The user approved the three proposed TDD behaviors as listed: new jobs start Open, the sidebar lists open jobs on every page, and the Skills list shows real job counts.
+- **Sideways:**
+  - **Getting an honest RED for the default status:** I had already written `default=Status.OPEN` into the model, so the behavior 1 test would have passed as soon as it was written. I took the default back out and regenerated the migration, which made the test fail on `'' == 'open'`. Then I put the default back as the GREEN step and regenerated the migration again.
+  - **Skills ordering regression:** switching the job count to `Count("job_openings")` broke the alphabetical order of the Skills list, because Django ignores `Meta.ordering` on aggregated queries. The existing ordering test caught it, and an explicit `.order_by("name")` fixed it. The tests themselves didn't change.
+  - **Checkbox styling:** after the tests passed, I added DaisyUI `checkbox` classes to the skills widget, because Django renders the checkbox tags itself.
+
 ## 2026-11-01 — Phase 3: Candidates — create, edit, detail, search and filters (implement + TDD)
 
 ### Prompts

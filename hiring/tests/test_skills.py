@@ -60,6 +60,22 @@ def test_list_shows_skills_with_job_counts(staff_client):
     ]
 
 
+def test_list_counts_jobs_using_each_skill(staff_client, make_job):
+    python = Skill.objects.create(name="Python")
+    sql = Skill.objects.create(name="SQL")
+    Skill.objects.create(name="Rust")
+    make_job(skills=[python, sql])
+    make_job(skills=[python])
+
+    response = staff_client.get(reverse("hiring:skill_list"))
+
+    assert [(s.name, s.job_count) for s in response.context["skills"]] == [
+        ("Python", 2),
+        ("Rust", 0),
+        ("SQL", 1),
+    ]
+
+
 def test_list_query_count_does_not_grow_with_skills(staff_client):
     Skill.objects.create(name="Python")
     with CaptureQueriesContext(connection) as one_skill:

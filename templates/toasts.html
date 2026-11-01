@@ -1,0 +1,7 @@
+<div id="toasts" class="toast toast-top toast-end z-50" {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% for message in messages %}
+    <div role="alert" class="toast-message alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'warning' %}alert-warning{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %}">
+      <span>{{ message }}</span>
+    </div>
+  {% endfor %}
+</div>

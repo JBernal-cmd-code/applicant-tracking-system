@@ -1,0 +1,25 @@
+{% load django_htmx tailwind_cli %}<!doctype html>
+<html lang="en" data-theme="corporate">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{% endblock %} · Applicant Tracking</title>
+    {% tailwind_css %}
+    {% htmx_script %}
+  </head>
+  <body class="min-h-screen bg-base-200" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    <div class="flex min-h-screen">
+      {% include "sidebar.html" %}
+      <main class="flex-1 p-8">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+    {% include "toasts.html" %}
+    <script>
+      // Toasts fade out via CSS, then leave the DOM so they don't block clicks.
+      document.addEventListener("animationend", (event) => {
+        if (event.target.classList.contains("toast-message")) event.target.remove();
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,31 @@
+{% load tailwind_cli %}<!doctype html>
+<html lang="en" data-theme="corporate">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Log in · Applicant Tracking</title>
+    {% tailwind_css %}
+  </head>
+  <body class="min-h-screen bg-base-200 flex items-center justify-center p-4">
+    <div class="card bg-base-100 shadow-md w-full max-w-sm">
+      <form method="post" class="card-body gap-4">
+        {% csrf_token %}
+        <h1 class="card-title text-xl">Applicant Tracking</h1>
+        <p class="text-sm text-base-content/70">Staff sign-in</p>
+        {% if form.non_field_errors %}
+          <div role="alert" class="alert alert-error text-sm">{{ form.non_field_errors|join:" " }}</div>
+        {% endif %}
+        <label class="fieldset">
+          <span class="fieldset-legend">Username</span>
+          <input type="text" name="username" class="input w-full" autocomplete="username" autofocus required value="{{ form.username.value|default:'' }}">
+        </label>
+        <label class="fieldset">
+          <span class="fieldset-legend">Password</span>
+          <input type="password" name="password" class="input w-full" autocomplete="current-password" required>
+        </label>
+        <input type="hidden" name="next" value="{{ next }}">
+        <button type="submit" class="btn btn-primary w-full">Log in</button>
+      </form>
+    </div>
+  </body>
+</html>

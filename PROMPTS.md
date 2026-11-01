@@ -28,6 +28,34 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-01 — Phase 1: project skeleton, authentication and app shell (implement + TDD)
+
+### Prompts
+1. `/implement @prd/applicant-tracking-system.md @plans/applicant-tracking-system.md implement Phase 1`
+2. Approved, go ahead with all three
+3. Approved, use the middleware
+4. Yes, go ahead with behavior 2
+5. Approved, go ahead
+6. Yes, go ahead with behavior 3
+7. Keep it as a regression test, go ahead
+8. Manual verification passed, go ahead and finish the phase
+
+### Summary
+- **Outcome:** Phase 1 is built and committed.
+  - **Project:** a uv project (Django 6.1, django-htmx, django-tailwind-cli; pytest, pytest-django and Ruff as dev dependencies) with the `config` project and the `hiring` app. Views and tests are packages split by area. `hiring/admin.py` was removed so no app models can be registered in admin.
+  - **Auth:** `LoginRequiredMiddleware` makes every view require login. `LOGIN_REDIRECT_URL` points to the dashboard. Django's auth URLs give the POST-only logout. A small `StaffLoginView` adds a "Welcome back" success message.
+  - **Shell:** a base layout, a sidebar (four main links, current user, POST logout), a toast area that fades messages out with CSS and removes them with a small script, a DaisyUI login page and a placeholder dashboard. The toast template takes an `oob` flag for later HTMX responses.
+  - **Tailwind:** DaisyUI comes from the tailwind-cli-extra binary, pinned to 2.10.34. The source is `assets/css/source.css`. The binary, the generated CSS and `db.sqlite3` are git-ignored. HTMX is served from django-htmx's own copy.
+  - **Tests:** 7 pytest tests (3 TDD, 4 normal). Ruff check and format, `manage.py check` and the migrations check are clean. The user confirmed the manual browser checks.
+- **Deviations:**
+  - The user approved all three proposed TDD behaviors and chose the login middleware I recommended over per-view decorators.
+  - Behavior 3 (logout ends the session) could not go RED. The user agreed to keep it as a regression test.
+- **Sideways:**
+  - **Pre-built behavior:** during scaffolding I had already added `LoginRequiredMiddleware` and `LOGIN_REDIRECT_URL`, which would have made behaviors 1 and 2 pass without a RED step. I removed each setting before writing its test, showed the failing assertion, then put it back.
+  - **Logout already green:** behavior 3 passed on its first run because Django's built-in `LogoutView` came with the auth URLs the scaffolding needed. I reported this instead of forcing a staged failure.
+  - **Unasked feature:** the "Welcome back" login toast isn't a PRD story. I added it so the toast criterion could be checked in Phase 1.
+  - **Environment:** the shell's `VIRTUAL_ENV` points at another project (book-catalog). uv warns about it and ignores it. A Bash `cd` briefly moved the working directory into the site-packages folder, which I corrected. My first HTMX smoke check requested the wrong file name (`htmx.min.js` instead of `htmx-2.min.js`), and the real file served fine.
+
 ## 2026-11-01 — Initial CLAUDE.md for the ATS
 
 ### Prompts

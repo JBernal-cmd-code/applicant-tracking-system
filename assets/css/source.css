@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: corporate --default;
+}
+
+@source "../../templates";
+@source "../../hiring/templates";
+
+/* Django message toasts fade out after a few seconds; base.html removes them when done. */
+@keyframes toast-fade-out {
+  to {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+}
+
+.toast-message {
+  animation: toast-fade-out 0.5s ease-in 4s forwards;
+}

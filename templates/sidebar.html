@@ -1,0 +1,19 @@
+{% with url_name=request.resolver_match.url_name %}
+<aside class="w-64 shrink-0 bg-base-100 border-r border-base-300 flex flex-col">
+  <div class="px-6 py-5 text-lg font-bold">Applicant Tracking</div>
+  <ul class="menu w-full gap-1 px-3">
+    <li><a href="{% url 'hiring:dashboard' %}" {% if url_name == 'dashboard' %}class="menu-active"{% endif %}>Dashboard</a></li>
+    {# Candidates, Job openings and Skills point at their pages once those phases add them. #}
+    <li><a href="#">Candidates</a></li>
+    <li><a href="#">Job openings</a></li>
+    <li><a href="#">Skills</a></li>
+  </ul>
+  <div class="mt-auto border-t border-base-300 p-4">
+    <div class="text-sm text-base-content/70 mb-2">Signed in as <span class="font-medium text-base-content">{{ user.get_username }}</span></div>
+    <form method="post" action="{% url 'logout' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-sm btn-outline w-full">Log out</button>
+    </form>
+  </div>
+</aside>
+{% endwith %}

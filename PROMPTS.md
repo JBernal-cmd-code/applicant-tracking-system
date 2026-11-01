@@ -28,6 +28,42 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-01 — Phase 9: Archive candidates and reopen applicants (implement + TDD)
+
+### Prompts
+1. `/implement @prd/applicant-tracking-system.md @plans/applicant-tracking-system.md implement Phase 9. Show me the TDD candidates to approve first, then go through RED and GREEN without stopping unless something unexpected happens.`
+2. approved, go ahead
+3. Everything passed in the browser. Go ahead with PROMPTS.md, commit and push.
+
+### Summary
+- **Outcome:** Phase 9 is built and committed.
+  - **Stage rules:** `allowed_moves(stage, reopen_to=None)` and `allowed_targets()` take the stage held before Rejected or Withdrawn, and offer a single `REOPEN` move to it. `FINISHED_STAGES` (Hired, Rejected, Withdrawn) defines what isn't active. The module still has no database code.
+  - **Candidate model:**
+    - `archive()` raises `ValidationError` while any application is active. The message lists each job with its stage. Archiving an already-archived candidate does nothing.
+    - `unarchive()` clears the flag.
+  - **Application model:**
+    - `reopen_stage` reads the previous stage from the StageChange that entered Rejected or Withdrawn.
+    - `reopen_blocked` is true for a Rejected or Withdrawn application whose candidate is archived.
+    - `move_to()` checks the rules with the reopen stage, then refuses Reopen while `reopen_blocked` with "Unarchive [candidate] before reopening this application."
+    - `clean()` refuses a new application from an archived candidate.
+    - The progress stepper now shows how far a Rejected or Withdrawn application got. This was left over from Phase 8.
+  - **Move form:** `StageMoveForm` uses the same reopen stage and archived check. A stale page gets a 200 response with an error toast.
+  - **Views:** POST-only `candidate_archive` and `candidate_unarchive` at `/candidates/<pk>/archive/` and `/unarchive/`. They follow the job close/reopen pattern, with `HX-Redirect` for HTMX requests. A refused archive shows the model's message as an error toast.
+  - **Pages:**
+    - The candidate page has an Archive button with `hx-confirm`, or an Unarchive button for archived candidates.
+    - The panel shows a "Reopen" group with a single "Reopen to X" button for Rejected and Withdrawn applicants. For an archived candidate, an unarchive-first warning with a link to the candidate replaces it. The "Archived" badge was already on the panel from Phase 7.
+  - **Tests:** 3 TDD tests (the Reopen test runs for both Rejected and Withdrawn) and 13 normal tests: Reopen in the pure stage rules, the archive and unarchive views, POST and login required, model validation and a stale form for archived candidates, the Reopen panel, the archived panel note and badge, and a stale archived Reopen. That makes 224 passing in total. Ruff, `manage.py check` and the migrations check are clean, and no migration was needed. The user confirmed the manual browser checks.
+- **Deviations:**
+  - The user approved all three proposed TDD behaviors as listed: the archive block, Reopen's target stage, and the archived Reopen refusal in `move_to()`.
+  - The application block for archived candidates wasn't a TDD behavior, because it follows the already-tested closed-job pattern.
+- **Sideways:**
+  - **`/implement` isn't an available skill in this environment:** I used the `tdd` skill directly and followed the prompt's approval and RED/GREEN instructions.
+  - **Behavior 1 scaffolding:** `archive()` didn't exist, so I first added a stub that archived unconditionally. The test then failed on `DID NOT RAISE ValidationError`, an honest assertion failure.
+  - **Behavior 2's RED wasn't a strict assertion failure:** `move_to()` raised `ValidationError` ("Can't move from Rejected to Final Review."). Nothing was missing; the existing code was refusing the very move under test. I counted it as RED and said so at the time.
+  - **Error order:** `move_to()` and the form check the stage rules before the archived check. Asking an archived candidate's application to move to a stage other than its reopen stage therefore gives the "Can't move" error, not the unarchive message.
+  - **Formatting:** `ruff format` reformatted the two test files after the tests passed. No assertions changed.
+  - **PROMPTS.md missed the phase commit:** I sent the log edit and the commit-and-push in the same batch. The edit failed on an anchor that didn't match the file, but the commit still ran, so Phase 9 (`9ee0c1a`) was pushed without this entry. The entry was added in a follow-up commit instead of rewriting the pushed one.
+
 ## 2026-11-01 — Phase 8: Stage moves (implement + TDD)
 
 ### Prompts

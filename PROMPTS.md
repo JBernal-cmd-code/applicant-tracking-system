@@ -28,6 +28,37 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-01 — Phase 5: Close and reopen jobs, and job list filters (implement + TDD)
+
+### Prompts
+1. `/implement @prd/applicant-tracking-system.md @plans/applicant-tracking-system.md implement Phase 5. Show me the TDD candidates to approve first, then go through RED and GREEN without stopping unless something unexpected happens.`
+2. approved, go ahead
+3. Make closing jobs easier to find. Add a Close or Reopen button next to Edit on each row of the job openings list, using the same POST views, confirm prompt, and job.close()/reopen() methods. Also add a short note on the job edit form saying to use the Close button on the job page to close the job. Add tests for the new list buttons.
+4. verified, it all works — go ahead and finish the phase
+
+### Summary
+- **Outcome:** Phase 5 is built and committed.
+  - **Model:** `JobOpening.close()` sets Closed and stamps `closed_at`, and `reopen()` sets Open and clears it. Each returns early if the job is already in the target state, so a second close keeps the original date. No migration was needed.
+  - **Form:** `JobFilterForm` is a plain form with search (title or department, case-insensitive) and status (Open / Closed / All, default Open). It follows the `CandidateFilterForm` pattern.
+  - **Views:** `job_close` and `job_reopen` are POST-only and call the model methods, then show a toast. An HTMX request gets an `HX-Redirect` to the job page, so the confirm prompt's request reloads the full page. A plain POST gets a normal redirect.
+  - **Pages:**
+    - The job page header shows "Closed on [date]" and either Close (an `hx-post` with `hx-confirm`) or Reopen (a plain POST form).
+    - The job list has the GET filter form, kept in the URL.
+    - Closed jobs drop out of the sidebar through the existing context processor.
+  - **Follow-up request:** every job list row now has Close or Reopen next to Edit. The button lives in a shared partial, `partials/job_close_reopen_button.html`, used by both the header and the list. The edit form has a note pointing to the Close button on the job page.
+  - **Fixtures:** `closed_job` in `conftest.py` now closes its job through `close()` instead of setting the status directly.
+  - **Tests:** 20 new tests, 2 of them TDD, for 86 in total.
+    - Ruff, `manage.py check` and the migrations check are clean.
+    - The user confirmed the manual browser checks.
+- **Deviations:**
+  - I proposed two TDD behaviors, `close()` and `reopen()` with their no-op rules. I left out the list filters because they copy the already-tested candidate filter pattern. The user approved both.
+  - After the first browser check, the user asked for Close/Reopen buttons on the job list rows and a note on the edit form, beyond the plan.
+- **Sideways:**
+  - **Not a real RED:** the first run of the `close()` test failed with an `AttributeError` because the method didn't exist yet, which isn't an assertion failure. I added empty `close()`/`reopen()` stubs, and the test then failed on `'open' == 'closed'`.
+  - **Replaced test:** the Phase 4 test "list shows open and closed jobs" no longer held once the list defaulted to Open. I replaced it with the parametrized status filter test.
+  - **Redirect from the list:** closing or reopening from a list row reuses the same views, so it lands on the job page rather than back on the list. I pointed this out and offered to return to the referring page. The user accepted the current behavior.
+  - **Weak assertion:** the edit-form note test also checks for a link to the job page, but the form's Cancel link already points there. The test's text assertion is what actually covers the note.
+
 ## 2026-11-01 — Phase 4: Job openings — create, edit, list and job page header (implement + TDD)
 
 ### Prompts

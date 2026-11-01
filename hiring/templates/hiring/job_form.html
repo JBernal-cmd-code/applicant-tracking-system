@@ -7,6 +7,9 @@
   <div class="card bg-base-100 shadow-sm mt-6 max-w-2xl">
     <form method="post" class="card-body gap-4" novalidate>
       {% csrf_token %}
+      {% if job %}
+        <p class="text-sm text-base-content/70">To close this job, use the Close button on the <a href="{% url 'hiring:job_detail' job.pk %}" class="link">job page</a>.</p>
+      {% endif %}
       {% if form.non_field_errors %}
         <div role="alert" class="alert alert-error text-sm">{{ form.non_field_errors|join:" " }}</div>
       {% endif %}

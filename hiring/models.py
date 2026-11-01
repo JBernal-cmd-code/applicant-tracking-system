@@ -1,5 +1,6 @@
 from django.db import models
 from django.db.models.functions import Lower
+from django.utils import timezone
 
 
 class Skill(models.Model):
@@ -80,3 +81,17 @@ class JobOpening(models.Model):
 
     def __str__(self):
         return self.title
+
+    def close(self):
+        if self.status == self.Status.CLOSED:
+            return
+        self.status = self.Status.CLOSED
+        self.closed_at = timezone.now()
+        self.save(update_fields=["status", "closed_at", "updated_at"])
+
+    def reopen(self):
+        if self.status == self.Status.OPEN:
+            return
+        self.status = self.Status.OPEN
+        self.closed_at = None
+        self.save(update_fields=["status", "closed_at", "updated_at"])

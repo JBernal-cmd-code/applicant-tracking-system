@@ -1,5 +1,7 @@
 import pytest
 from django.urls import reverse, reverse_lazy
+from django.utils.formats import date_format
+from django.utils.timezone import localtime
 
 from hiring.forms import JobOpeningForm
 from hiring.models import JobOpening, Skill
@@ -154,10 +156,41 @@ def test_missing_job_page_is_404(staff_client):
     assert response.status_code == 404
 
 
-def test_list_shows_open_and_closed_jobs(staff_client, open_job, closed_job):
-    response = staff_client.get(reverse("hiring:job_list"))
+def listed(response):
+    return {job.title for job in response.context["jobs"]}
 
-    assert set(response.context["jobs"]) == {open_job, closed_job}
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        ({}, {"Backend Developer"}),
+        ({"status": "open"}, {"Backend Developer"}),
+        ({"status": "closed"}, {"Data Analyst"}),
+        ({"status": "all"}, {"Backend Developer", "Data Analyst"}),
+    ],
+)
+def test_status_filter_defaults_to_open(staff_client, open_job, closed_job, params, expected):
+    response = staff_client.get(reverse("hiring:job_list"), params)
+
+    assert listed(response) == expected
+
+
+def test_search_matches_title_or_department_ignoring_case(staff_client, make_job):
+    make_job(title="Data Engineer", department="Platform")
+    make_job(title="Recruiter", department="People DATA Team")
+    make_job(title="Designer", department="Product")
+
+    response = staff_client.get(reverse("hiring:job_list"), {"q": "data"})
+
+    assert listed(response) == {"Data Engineer", "Recruiter"}
+
+
+def test_job_list_form_reflects_filters_from_url(staff_client):
+    response = staff_client.get(reverse("hiring:job_list"), {"q": "analyst", "status": "all"})
+
+    content = response.content.decode()
+    assert 'value="analyst"' in content
+    assert '<option value="all" selected>' in content
 
 
 def test_sidebar_links_to_job_list(staff_client):
@@ -173,6 +206,123 @@ def test_no_delete_action_for_jobs(staff_client, open_job):
         reverse("hiring:job_edit", args=[open_job.pk]),
     ):
         assert "delete" not in staff_client.get(url).content.decode().lower()
+
+
+def test_close_marks_job_closed_once_and_keeps_first_closed_at(open_job):
+    open_job.close()
+    open_job.refresh_from_db()
+    first_closed_at = open_job.closed_at
+
+    assert open_job.status == JobOpening.Status.CLOSED
+    assert first_closed_at is not None
+
+    open_job.close()
+    open_job.refresh_from_db()
+
+    assert open_job.status == JobOpening.Status.CLOSED
+    assert open_job.closed_at == first_closed_at
+
+
+def test_reopen_marks_job_open_and_clears_closed_at(closed_job):
+    closed_job.reopen()
+    closed_job.refresh_from_db()
+
+    assert closed_job.status == JobOpening.Status.OPEN
+    assert closed_job.closed_at is None
+
+    closed_job.reopen()
+    closed_job.refresh_from_db()
+
+    assert closed_job.status == JobOpening.Status.OPEN
+    assert closed_job.closed_at is None
+
+
+@pytest.mark.parametrize("name", ["hiring:job_close", "hiring:job_reopen"])
+def test_close_and_reopen_require_login(client, open_job, name):
+    response = client.post(reverse(name, args=[open_job.pk]))
+
+    assert response.status_code == 302
+    assert response["Location"].startswith(reverse("login"))
+    open_job.refresh_from_db()
+    assert open_job.status == JobOpening.Status.OPEN
+
+
+@pytest.mark.parametrize("name", ["hiring:job_close", "hiring:job_reopen"])
+def test_close_and_reopen_refuse_get(staff_client, open_job, name):
+    assert staff_client.get(reverse(name, args=[open_job.pk])).status_code == 405
+
+
+def test_close_view_closes_job_and_shows_toast(staff_client, open_job):
+    response = staff_client.post(reverse("hiring:job_close", args=[open_job.pk]), follow=True)
+
+    open_job.refresh_from_db()
+    assert open_job.status == JobOpening.Status.CLOSED
+    assert response.request["PATH_INFO"] == reverse("hiring:job_detail", args=[open_job.pk])
+    assert "Job opening “Backend Developer” closed." in response.content.decode()
+
+
+def test_htmx_close_asks_client_to_reload_job_page(staff_client, open_job):
+    response = staff_client.post(
+        reverse("hiring:job_close", args=[open_job.pk]), headers={"HX-Request": "true"}
+    )
+
+    assert response["HX-Redirect"] == reverse("hiring:job_detail", args=[open_job.pk])
+    open_job.refresh_from_db()
+    assert open_job.status == JobOpening.Status.CLOSED
+
+
+def test_reopen_view_reopens_job_and_shows_toast(staff_client, closed_job):
+    response = staff_client.post(reverse("hiring:job_reopen", args=[closed_job.pk]), follow=True)
+
+    closed_job.refresh_from_db()
+    assert closed_job.status == JobOpening.Status.OPEN
+    assert "Job opening “Data Analyst” reopened." in response.content.decode()
+
+
+def test_open_job_header_offers_confirmed_close(staff_client, open_job):
+    content = staff_client.get(reverse("hiring:job_detail", args=[open_job.pk])).content.decode()
+
+    assert f'hx-post="{reverse("hiring:job_close", args=[open_job.pk])}"' in content
+    assert "hx-confirm=" in content
+    assert reverse("hiring:job_reopen", args=[open_job.pk]) not in content
+    assert "Closed on" not in content
+
+
+def test_closed_job_header_shows_closed_date_and_reopen(staff_client, closed_job):
+    content = staff_client.get(reverse("hiring:job_detail", args=[closed_job.pk])).content.decode()
+
+    assert f"Closed on {date_format(localtime(closed_job.closed_at), 'M j, Y')}" in content
+    assert f'action="{reverse("hiring:job_reopen", args=[closed_job.pk])}"' in content
+    assert reverse("hiring:job_close", args=[closed_job.pk]) not in content
+
+
+def test_job_list_rows_offer_close_or_reopen(staff_client, open_job, closed_job):
+    content = staff_client.get(reverse("hiring:job_list"), {"status": "all"}).content.decode()
+
+    assert f'hx-post="{reverse("hiring:job_close", args=[open_job.pk])}"' in content
+    assert f'action="{reverse("hiring:job_reopen", args=[closed_job.pk])}"' in content
+    assert reverse("hiring:job_reopen", args=[open_job.pk]) not in content
+    assert reverse("hiring:job_close", args=[closed_job.pk]) not in content
+
+
+def test_job_list_close_button_asks_for_confirmation(staff_client, open_job):
+    content = staff_client.get(reverse("hiring:job_list")).content.decode()
+
+    assert "hx-confirm=" in content
+
+
+def test_edit_form_points_to_close_button_on_job_page(staff_client, open_job):
+    content = staff_client.get(reverse("hiring:job_edit", args=[open_job.pk])).content.decode()
+
+    assert "use the Close button on the" in content
+    assert f'href="{reverse("hiring:job_detail", args=[open_job.pk])}"' in content
+
+
+def test_closing_a_job_drops_it_from_the_sidebar(staff_client, open_job):
+    staff_client.post(reverse("hiring:job_close", args=[open_job.pk]))
+
+    content = staff_client.get(reverse("hiring:skill_list")).content.decode()
+    assert f'href="{reverse("hiring:job_detail", args=[open_job.pk])}"' not in content
 
 
 def test_sidebar_lists_open_jobs_on_every_page(staff_client, open_job, closed_job):

@@ -1,7 +1,6 @@
 import itertools
 
 import pytest
-from django.utils import timezone
 
 from hiring.models import Candidate, JobOpening
 
@@ -64,5 +63,6 @@ def open_job(make_job):
 
 @pytest.fixture
 def closed_job(make_job):
-    # Phase 5 adds close(); until then a closed job is set up directly.
-    return make_job(title="Data Analyst", status=JobOpening.Status.CLOSED, closed_at=timezone.now())
+    job = make_job(title="Data Analyst")
+    job.close()
+    return job

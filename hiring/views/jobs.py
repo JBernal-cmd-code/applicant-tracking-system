@@ -1,14 +1,17 @@
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.views.decorators.http import require_POST
+from django_htmx.http import HttpResponseClientRedirect
 
-from hiring.forms import JobOpeningForm
+from hiring.forms import JobFilterForm, JobOpeningForm
 from hiring.models import JobOpening
 
 
 def job_list(request):
-    # Search and Open / Closed / All filters arrive in Phase 5.
-    jobs = JobOpening.objects.prefetch_related("skills")
-    return render(request, "hiring/job_list.html", {"jobs": jobs})
+    filter_form = JobFilterForm(request.GET)
+    jobs = filter_form.filter(JobOpening.objects.prefetch_related("skills"))
+    return render(request, "hiring/job_list.html", {"jobs": jobs, "filter_form": filter_form})
 
 
 def job_detail(request, pk):
@@ -33,3 +36,28 @@ def job_edit(request, pk):
         messages.success(request, f"Job opening “{job}” saved.")
         return redirect("hiring:job_detail", pk=job.pk)
     return render(request, "hiring/job_form.html", {"form": form, "job": job})
+
+
+@require_POST
+def job_close(request, pk):
+    job = get_object_or_404(JobOpening, pk=pk)
+    job.close()
+    messages.success(request, f"Job opening “{job}” closed.")
+    return _back_to_job(request, job)
+
+
+@require_POST
+def job_reopen(request, pk):
+    job = get_object_or_404(JobOpening, pk=pk)
+    job.reopen()
+    messages.success(request, f"Job opening “{job}” reopened.")
+    return _back_to_job(request, job)
+
+
+def _back_to_job(request, job):
+    # Close is posted by HTMX (for its confirm prompt), so a full-page reload
+    # is requested instead of swapping the redirected page into the button.
+    url = reverse("hiring:job_detail", args=[job.pk])
+    if request.htmx:
+        return HttpResponseClientRedirect(url)
+    return redirect(url)

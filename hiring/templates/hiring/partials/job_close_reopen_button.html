@@ -1,0 +1,10 @@
+{% if job.status == "closed" %}
+  <form method="post" action="{% url 'hiring:job_reopen' job.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="btn {{ btn_class }} text-success">Reopen</button>
+  </form>
+{% else %}
+  <button type="button" class="btn {{ btn_class }} text-error"
+          hx-post="{% url 'hiring:job_close' job.pk %}"
+          hx-confirm="Close “{{ job.title }}”? Existing applications stay where they are.">Close</button>
+{% endif %}

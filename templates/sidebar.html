@@ -3,8 +3,8 @@
   <div class="px-6 py-5 text-lg font-bold">Applicant Tracking</div>
   <ul class="menu w-full gap-1 px-3">
     <li><a href="{% url 'hiring:dashboard' %}" {% if url_name == 'dashboard' %}class="menu-active"{% endif %}>Dashboard</a></li>
-    {# Candidates and Job openings point at their pages once those phases add them. #}
-    <li><a href="#">Candidates</a></li>
+    {# Job openings points at its page once Phase 4 adds it. #}
+    <li><a href="{% url 'hiring:candidate_list' %}" {% if url_name|slice:":10" == 'candidate_' %}class="menu-active"{% endif %}>Candidates</a></li>
     <li><a href="#">Job openings</a></li>
     <li><a href="{% url 'hiring:skill_list' %}" {% if url_name|slice:":6" == 'skill_' %}class="menu-active"{% endif %}>Skills</a></li>
   </ul>

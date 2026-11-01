@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Candidates{% endblock %}
+
+{% block content %}
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-semibold">Candidates</h1>
+    <a href="{% url 'hiring:candidate_create' %}" class="btn btn-primary btn-sm">Add candidate</a>
+  </div>
+  <form method="get" class="flex flex-wrap items-end gap-3 mt-6">
+    <label class="fieldset">
+      <span class="fieldset-legend">Search</span>
+      <input type="search" name="q" class="input w-72" placeholder="Name or email" value="{{ filter_form.q.value|default:'' }}">
+    </label>
+    <label class="fieldset">
+      <span class="fieldset-legend">Source</span>
+      <select name="source" class="select w-44">
+        {% for value, label in filter_form.fields.source.choices %}
+          <option value="{{ value }}" {% if filter_form.source.value == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="fieldset">
+      <span class="fieldset-legend">Status</span>
+      <select name="status" class="select w-36">
+        {% for value, label in filter_form.fields.status.choices %}
+          <option value="{{ value }}" {% if filter_form.status.value == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-neutral">Filter</button>
+    <a href="{% url 'hiring:candidate_list' %}" class="btn btn-ghost">Clear</a>
+  </form>
+  <div class="card bg-base-100 shadow-sm mt-6">
+    <div class="card-body p-0">
+      {% if candidates %}
+        <table class="table">
+          <thead>
+            <tr><th>Name</th><th>Email</th><th>Source</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for candidate in candidates %}
+              <tr>
+                <td class="font-medium"><a href="{% url 'hiring:candidate_detail' candidate.pk %}" class="link link-hover">{{ candidate }}</a></td>
+                <td>{{ candidate.email }}</td>
+                <td>{{ candidate.get_source_display }}</td>
+                <td>{% if candidate.archived %}<span class="badge badge-ghost">Archived</span>{% else %}<span class="badge badge-success badge-soft">Active</span>{% endif %}</td>
+                <td class="text-right"><a href="{% url 'hiring:candidate_edit' candidate.pk %}" class="btn btn-ghost btn-xs">Edit</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="p-6 text-base-content/60">No candidates match these filters.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

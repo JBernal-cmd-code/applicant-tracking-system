@@ -1,4 +1,8 @@
+import itertools
+
 import pytest
+
+from hiring.models import Candidate
 
 STAFF_PASSWORD = "correct-horse-battery"
 
@@ -12,3 +16,23 @@ def staff_user(django_user_model):
 def staff_client(client, staff_user):
     client.force_login(staff_user)
     return client
+
+
+@pytest.fixture
+def make_candidate(db):
+    counter = itertools.count(1)
+
+    def make(**fields):
+        n = next(counter)
+        fields.setdefault("first_name", f"First{n}")
+        fields.setdefault("last_name", f"Last{n}")
+        fields.setdefault("email", f"candidate{n}@example.com")
+        fields.setdefault("source", Candidate.Source.WEBSITE)
+        return Candidate.objects.create(**fields)
+
+    return make
+
+
+@pytest.fixture
+def candidate(make_candidate):
+    return make_candidate(first_name="Ada", last_name="Lovelace", email="ada@example.com")

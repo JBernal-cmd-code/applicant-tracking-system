@@ -28,6 +28,41 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-01 — Phase 3: Candidates — create, edit, detail, search and filters (implement + TDD)
+
+### Prompts
+1. `/implement @prd/applicant-tracking-system.md @plans/applicant-tracking-system.md implement Phase 3, and keep going through the TDD behaviors without asking unless something unexpected happens`
+2. (Interrupted the agent while it was running the behavior 2 test.) I didn’t get to approve the TDD candidates for this phase. List the behaviors you tested and show me each test, so I can review them now.
+3. Approved, both tests are good. Also add TDD behaviors for the database rejects a case-insensitive duplicate email, the candidate form shows the duplicate email error on the email field, and the source filter. If any of them pass immediately because the code was already built, say so and keep them as regression tests. Then run them through red and green without stopping unless something unexpected happens.
+4. Two UI fixes. On the candidates list, add a visible Edit button at the end of each row, like the Skills list. On the candidate detail page, make Edit a real DaisyUI button placed next to the candidate’s name instead of plain text in the far corner. Clicking a name in the list should still open the detail page.
+5. Everything passed in the browser. Go ahead with PROMPTS.md, commit and push. In the Sideways section, note that the TDD candidate approval step was skipped at the start of this phase because of my prompt wording, and that I caught it, stopped the agent, reviewed the tests, and added the missing email and source filter tests. Also note the Edit button fix.
+
+### Summary
+- **Outcome:** Phase 3 is built and committed.
+  - **Model:** `Candidate` has a `Source` choice list (Website, Job Board, Referral, Other), an archived flag, and a case-insensitive unique constraint on `Lower("email")`, added in migration `0002_candidate`.
+  - **Forms:**
+    - `CandidateForm` is a ModelForm that leaves out the archived flag. Its `clean_email()` puts a duplicate email error on the email field, the same way the Skill form does.
+    - `CandidateFilterForm` is a plain form with search, source and status (Active / Archived / All, default Active). Its `filter()` method applies them to a queryset.
+  - **Pages:** a list page with GET filters kept in the URL, a detail page, and create and edit pages, all function views in `hiring/views/candidates.py`. The sidebar Candidates link is live. There is no delete action.
+  - **Fixtures:** `conftest.py` gained `make_candidate` and `candidate`.
+  - **Tests:** 24 new tests, 5 of them TDD, for 45 in total.
+    - Ruff, `manage.py check` and the migrations check are clean.
+    - The user confirmed the manual browser checks.
+- **Deviations:**
+  - I proposed only two TDD behaviors: search, and the status filter defaulting to Active. I left out email uniqueness because the tested Skill pattern already settled it. The user approved both, then added three more: the database email constraint, the inline email form error, and the source filter.
+  - **Already-built TDD behaviors:** the email constraint and the email form error tests passed as soon as they were written, because that code had been built along with the model and form. The user had asked in advance to keep tests like these as regression tests, so they were kept. The source filter test went RED, then GREEN.
+- **Sideways:**
+  - **Skipped candidate approval:** I didn't stop for approval of the TDD candidate list. I read the prompt’s “keep going through the TDD behaviors without asking” as covering that step too.
+    - By then I had finished behavior 1 (search) through red and green, and written behavior 2’s test.
+    - The user caught it while I was running the behavior 2 test, stopped me, and had me list the behaviors and show each test.
+    - After reviewing the tests, the user approved them and added the missing email constraint, email form error and source filter tests.
+    - I saved a memory: always stop after the candidate list, even under "keep going".
+  - **Edit buttons:** after the first browser check, the user found the Edit actions weak.
+    - The list had no Edit action per row. It now ends each row with an Edit button styled like the one on the Skills list.
+    - The detail page's Edit sat in the far corner and looked like plain text. It is now an outlined primary button next to the candidate's name.
+    - A test now checks that each list row has both its detail link and its edit link.
+  - **Filter fallback:** if the filter form is invalid (for example `?status=bogus`), `filter()` ignores every filter and shows active candidates. That was a choice I made myself and wasn't raised with the user.
+
 ## 2026-11-01 — Phase 2: Skills (implement + TDD)
 
 ### Prompts

@@ -14,6 +14,7 @@ Internal Django web app for logged-in hiring staff to track candidates, job open
 - Dev server with Tailwind watcher: `uv run python manage.py tailwind runserver`
 - Tests: `uv run pytest`
 - Lint and format: `uv run ruff check .` and `uv run ruff format .`
+- Demo data (replaces all hiring data): `uv run python manage.py seed_demo --reset`
 
 ## Architecture decisions
 

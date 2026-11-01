@@ -6,7 +6,7 @@ from django_htmx.http import HttpResponseClientRedirect
 
 from hiring.forms import ApplicationForm, JobFilterForm, JobOpeningForm
 from hiring.models import JobOpening
-from hiring.stages import Stage
+from hiring.views.pipeline import pipeline_context
 
 
 def job_list(request):
@@ -17,16 +17,8 @@ def job_list(request):
 
 def job_detail(request, pk):
     job = get_object_or_404(JobOpening.objects.prefetch_related("skills"), pk=pk)
-    applications = job.applications.select_related("candidate")
-    stages = [{"value": stage.value, "label": stage.label, "applications": []} for stage in Stage]
-    by_value = {stage["value"]: stage for stage in stages}
-    for application in applications:
-        by_value[application.stage]["applications"].append(application)
-    return render(
-        request,
-        "hiring/job_detail.html",
-        {"job": job, "stages": stages, "has_applications": bool(applications)},
-    )
+    context = pipeline_context(job, request.GET.get("application"))
+    return render(request, "hiring/job_detail.html", context)
 
 
 def job_create(request):

@@ -28,6 +28,42 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-01 — Phase 7: Applicant detail panel, read-only (implement + TDD)
+
+### Prompts
+1. `/implement @prd/applicant-tracking-system.md @plans/applicant-tracking-system.md implement Phase 7. Show me the TDD candidates to approve first, then go through RED and GREEN without stopping unless something unexpected happens. Match the detail panel to option C in prototypes/pipeline-ui.html.`
+2. approvef
+3. Verified in the browser, go ahead with PROMPTS.md, commit and push
+
+### Summary
+- **Outcome:** Phase 7 is built and committed.
+  - **Panel endpoint:** `/applications/<pk>/panel/` (`hiring/views/pipeline.py`) returns the applicant detail panel. It also sends the applicant list as an out-of-band swap, so the highlighted row follows the selection. A missing application gives a 404.
+  - **Shared helper:** `pipeline_context(job, selected_pk)` groups the applicants by stage and picks the selected one from this job's own applications only. The job page now uses it too, reading `?application=<pk>`.
+  - **Panel** (`partials/applicant_panel.html`), matching option C:
+    - A header card with an initials avatar, the name (linked to the candidate, with an Archived badge), email · source · applied date, and a large stage badge.
+    - Contact details: email, phone, source with source details, and the resume link.
+    - A progress stepper over the six progress stages, an alert for Rejected, Withdrawn or Hired, and read-only notes.
+    - A stage history card.
+    - When nothing is selected, the panel says "Select an applicant to see their details."
+  - **List rows:** each row loads the panel with `hx-get` and pushes `?application=<pk>` with `hx-push-url`. The `href` is the same URL, as a fallback.
+  - **Candidate page:** each application row links to that applicant on the job page.
+  - **Stages:** `hiring/stages.py` gained `PROGRESS_STAGES`. `Application.progress_steps` drives the stepper.
+  - **Tests:** 11 new tests in `test_pipeline.py`, 3 of them TDD (one parametrized four ways). That makes 115 passing in total.
+    - Ruff, `manage.py check` and the migrations check are clean. There is no new migration.
+    - The user confirmed the manual browser checks.
+- **Deviations:**
+  - The user approved all three proposed TDD behaviors as listed: the panel fragment, selected-on-load, and safe handling of a bad `application` parameter.
+  - **Departures from option C:** I pointed these out up front, and they were accepted.
+    - The "Move this application" card is left out until Phase 8.
+    - The stage history only shows the "Applied via [source]" starting entry, because StageChange arrives in Phase 8.
+    - Rejected and Withdrawn don't say "while in X" and fill no stepper steps yet.
+    - The applied date is shown as a date rather than "N days ago".
+- **Sideways:**
+  - **TDD 2's first run wasn't RED:** it hit a KeyError (`selected` missing from the context), not an assertion failure. I added the key as scaffolding and re-ran, and it then went RED properly.
+  - **TDD 2 test repair:** its "exactly one highlighted row" count also matched the sidebar's `menu-active` on the current job. I limited the count to the pipeline list, which was a mechanical fix with the same assertion.
+  - **TDD 3 never went RED:** it passed on its first run, because test 2's code already compares ids as text within the job's own applications. To prove the test wasn't vacuous, I swapped in a naive `Application.objects.get()` for a moment. It failed 3 of the 4 cases (it selected a foreign applicant and crashed on `abc` and `999999`), then I reverted it. I reported this rather than stopping mid-phase.
+  - **TDD 1 weakness:** the "Interview" check would also match the stepper label, so it doesn't prove the stage badge on its own.
+
 ## 2026-11-01 — Phase 6: Applications — add from the job page, pipeline list and summary bar (implement + TDD)
 
 ### Prompts

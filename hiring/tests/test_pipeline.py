@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hiring.forms import ApplicationForm
-from hiring.models import Application
+from hiring.models import Application, Candidate
 from hiring.stages import Stage
 
 pytestmark = pytest.mark.django_db
@@ -220,10 +220,142 @@ def test_candidate_page_lists_applications_with_job_stage_and_days(
         reverse("hiring:candidate_detail", args=[candidate.pk])
     ).content.decode()
 
-    assert f'href="{reverse("hiring:job_detail", args=[backend.pk])}"' in content
+    assert f'href="{reverse("hiring:job_detail", args=[backend.pk])}?application=' in content
     assert "Data Analyst" in content
     assert "Final Review" in content
     assert "1 day<" in content
+
+
+def test_panel_fragment_shows_contact_source_stage_and_notes(
+    staff_client, open_job, make_candidate, make_application
+):
+    grace = make_candidate(
+        first_name="Grace",
+        last_name="Hopper",
+        email="grace@example.com",
+        phone="555-0100",
+        source=Candidate.Source.REFERRAL,
+        source_details="Referred by Sam",
+    )
+    application = make_application(
+        grace, open_job, stage=Stage.INTERVIEW, notes="Strong COBOL background."
+    )
+
+    response = staff_client.get(reverse("hiring:application_panel", args=[application.pk]))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "<html" not in content
+    for text in [
+        'id="applicant-panel"',
+        "Grace Hopper",
+        "grace@example.com",
+        "555-0100",
+        "Referral",
+        "Referred by Sam",
+        "Interview",
+        "Strong COBOL background.",
+    ]:
+        assert text in content
+
+
+def test_job_page_with_application_parameter_renders_that_applicant_selected(
+    staff_client, open_job, make_candidate, make_application
+):
+    make_application(make_candidate(first_name="Alan", last_name="Turing"), open_job)
+    grace = make_application(
+        make_candidate(first_name="Grace", last_name="Hopper"), open_job, notes="Selected one."
+    )
+
+    response = staff_client.get(
+        reverse("hiring:job_detail", args=[open_job.pk]), {"application": grace.pk}
+    )
+
+    content = response.content.decode()
+    assert response.context["selected"] == grace
+    assert "Selected one." in content
+    pipeline_list = content.split('id="pipeline-list"')[1].split('id="applicant-panel"')[0]
+    assert pipeline_list.count("menu-active") == 1
+    assert 'class="menu-active"' in pipeline_list.split("Grace Hopper")[0].rsplit("<li>", 1)[1]
+
+
+def test_panel_response_swaps_list_out_of_band_with_applicant_highlighted(
+    staff_client, open_job, make_candidate, make_application
+):
+    application = make_application(make_candidate(), open_job)
+
+    content = staff_client.get(
+        reverse("hiring:application_panel", args=[application.pk])
+    ).content.decode()
+
+    assert 'id="pipeline-list"' in content
+    assert 'hx-swap-oob="true"' in content
+    assert 'class="menu-active"' in content
+
+
+def test_pipeline_list_loads_panel_with_htmx_and_pushes_url(
+    staff_client, open_job, make_candidate, make_application
+):
+    application = make_application(make_candidate(), open_job)
+    selected_url = (
+        f"{reverse('hiring:job_detail', args=[open_job.pk])}?application={application.pk}"
+    )
+
+    content = staff_client.get(reverse("hiring:job_detail", args=[open_job.pk])).content.decode()
+
+    assert f'hx-get="{reverse("hiring:application_panel", args=[application.pk])}"' in content
+    assert f'hx-push-url="{selected_url}"' in content
+    assert f'href="{selected_url}"' in content
+
+
+def test_panel_for_missing_application_is_404(staff_client):
+    response = staff_client.get(reverse("hiring:application_panel", args=[999999]))
+
+    assert response.status_code == 404
+
+
+def test_panel_requires_login(client, open_job, make_candidate, make_application):
+    application = make_application(make_candidate(), open_job)
+
+    response = client.get(reverse("hiring:application_panel", args=[application.pk]))
+
+    assert response.status_code == 302
+    assert response["Location"].startswith(reverse("login"))
+
+
+def test_candidate_page_links_each_application_to_selected_applicant(
+    staff_client, candidate, open_job, make_application
+):
+    application = make_application(candidate, open_job)
+
+    content = staff_client.get(
+        reverse("hiring:candidate_detail", args=[candidate.pk])
+    ).content.decode()
+
+    selected_url = (
+        f"{reverse('hiring:job_detail', args=[open_job.pk])}?application={application.pk}"
+    )
+    assert f'href="{selected_url}"' in content
+
+
+@pytest.mark.parametrize("value", ["other-job", "abc", "999999", ""])
+def test_job_page_ignores_application_parameter_not_on_this_job(
+    staff_client, open_job, make_job, make_candidate, make_application, value
+):
+    make_application(make_candidate(), open_job)
+    foreign = make_application(make_candidate(), make_job(), notes="Foreign notes.")
+    if value == "other-job":
+        value = foreign.pk
+
+    response = staff_client.get(
+        reverse("hiring:job_detail", args=[open_job.pk]), {"application": value}
+    )
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert response.context["selected"] is None
+    assert "Foreign notes." not in content
+    assert "Select an applicant to see their details." in content
 
 
 def test_candidate_page_without_applications_says_so(staff_client, candidate):

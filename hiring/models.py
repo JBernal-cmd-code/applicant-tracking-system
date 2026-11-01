@@ -3,7 +3,7 @@ from django.db import models
 from django.db.models.functions import Lower
 from django.utils import timezone
 
-from hiring.stages import Stage
+from hiring.stages import PROGRESS_STAGES, Stage
 
 
 class Skill(models.Model):
@@ -130,3 +130,10 @@ class Application(models.Model):
     def days_in_stage(self):
         # Stage history arrives in Phase 8; until then the stage began at creation.
         return (timezone.now() - self.created_at).days
+
+    @property
+    def progress_steps(self):
+        # Rejected and Withdrawn reach no step until history can tell where they left off.
+        stages = list(PROGRESS_STAGES)
+        reached = stages.index(self.stage) if self.stage in stages else -1
+        return [{"label": stage.label, "reached": i <= reached} for i, stage in enumerate(stages)]

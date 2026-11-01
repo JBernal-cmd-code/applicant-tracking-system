@@ -1,0 +1,65 @@
+<div id="applicant-panel" class="flex flex-col gap-6">
+  {% if application %}
+    {% with candidate=application.candidate %}
+      <div class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm">
+        <div class="card-body gap-5">
+          <div class="flex flex-wrap items-center gap-4">
+            <div class="avatar avatar-placeholder"><div class="bg-base-300 text-base-content w-14 rounded-full"><span class="text-xs font-semibold">{{ candidate.first_name|first|upper }}{{ candidate.last_name|first|upper }}</span></div></div>
+            <div class="flex-1 min-w-0">
+              <h2 class="text-xl font-semibold flex items-center gap-2">
+                <a href="{% url 'hiring:candidate_detail' candidate.pk %}" class="link link-hover">{{ candidate }}</a>
+                {% if candidate.archived %}<span class="badge badge-ghost badge-sm">Archived</span>{% endif %}
+              </h2>
+              <div class="text-sm text-base-content/60">{{ candidate.email }} · via {{ candidate.get_source_display }} · applied {{ application.created_at|date:"M j, Y" }}</div>
+            </div>
+            {% include "hiring/partials/stage_badge.html" with stage=application.stage label=application.get_stage_display size="badge-lg" %}
+          </div>
+          <dl class="grid grid-cols-[8rem_1fr] gap-y-2 text-sm">
+            <dt class="text-base-content/60">Email</dt>
+            <dd><a href="mailto:{{ candidate.email }}" class="link">{{ candidate.email }}</a></dd>
+            <dt class="text-base-content/60">Phone</dt>
+            <dd>{{ candidate.phone|default:"—" }}</dd>
+            <dt class="text-base-content/60">Source</dt>
+            <dd>{{ candidate.get_source_display }}{% if candidate.source_details %} · {{ candidate.source_details }}{% endif %}</dd>
+            <dt class="text-base-content/60">Resume</dt>
+            <dd class="truncate">{% if candidate.resume_url %}<a href="{{ candidate.resume_url }}" class="link" target="_blank" rel="noopener noreferrer">{{ candidate.resume_url }}</a>{% else %}—{% endif %}</dd>
+          </dl>
+          <ul class="steps steps-horizontal w-full text-xs">
+            {% for step in application.progress_steps %}
+              <li class="step{% if step.reached %} step-primary{% endif %}">{{ step.label }}</li>
+            {% endfor %}
+          </ul>
+          {% if application.stage == "rejected" %}
+            <div class="alert alert-soft alert-error text-sm">Rejected.</div>
+          {% elif application.stage == "withdrawn" %}
+            <div class="alert alert-soft text-sm">Withdrawn.</div>
+          {% elif application.stage == "hired" %}
+            <div class="alert alert-soft alert-success text-sm">Hired. This application is final and can't be moved.</div>
+          {% endif %}
+          <div>
+            <h3 class="text-sm font-medium">Notes</h3>
+            <p class="mt-1 text-sm whitespace-pre-line {% if not application.notes %}text-base-content/50{% endif %}">{{ application.notes|default:"No notes." }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm">
+        <div class="card-body">
+          <h3 class="font-semibold mb-2">Stage history</h3>
+          <ul class="flex flex-col gap-4">
+            {# Stage changes are recorded from Phase 8; until then only the starting entry exists. #}
+            <li class="flex gap-3">
+              <div class="w-2 h-2 mt-2 rounded-full bg-base-300 shrink-0"></div>
+              <div class="text-sm">Applied via {{ candidate.get_source_display }}<div class="text-xs text-base-content/60 mt-1">{{ application.created_at|date:"M j, Y" }}</div></div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    {% endwith %}
+  {% else %}
+    <div class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm">
+      <div class="card-body">
+        <p class="text-sm text-base-content/60">Select an applicant to see their details.</p>
+      </div>
+    </div>
+  {% endif %}
+</div>

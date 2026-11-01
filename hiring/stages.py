@@ -12,3 +12,14 @@ class Stage(TextChoices):
     HIRED = "hired", "Hired"
     REJECTED = "rejected", "Rejected"
     WITHDRAWN = "withdrawn", "Withdrawn"
+
+
+# The forward path an application can travel; Rejected and Withdrawn sit outside it.
+PROGRESS_STAGES = (
+    Stage.APPLIED,
+    Stage.SCREENING,
+    Stage.INTERVIEW,
+    Stage.FINAL_REVIEW,
+    Stage.OFFER,
+    Stage.HIRED,
+)

@@ -7,7 +7,10 @@
           {% for application in stage.applications %}
             {% with candidate=application.candidate %}
               <li>
-                <a href="{% url 'hiring:candidate_detail' candidate.pk %}">
+                {% url 'hiring:job_detail' job.pk as job_url %}
+                <a href="{{ job_url }}?application={{ application.pk }}"{% if application == selected %} class="menu-active"{% endif %}
+                   hx-get="{% url 'hiring:application_panel' application.pk %}" hx-target="#applicant-panel" hx-swap="outerHTML"
+                   hx-push-url="{{ job_url }}?application={{ application.pk }}">
                   <div class="avatar avatar-placeholder"><div class="bg-base-300 text-base-content w-7 rounded-full"><span class="text-xs font-semibold">{{ candidate.first_name|first|upper }}{{ candidate.last_name|first|upper }}</span></div></div>
                   <span class="flex-1 truncate">{{ candidate }}</span>
                   <span class="text-xs opacity-60">{% include "hiring/partials/days_in_stage.html" %}</span>

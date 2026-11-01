@@ -35,6 +35,6 @@
   </div>
   <div class="grid lg:grid-cols-[320px_1fr] gap-6 mt-6">
     {% include "hiring/partials/pipeline_list.html" %}
-    {# The applicant detail panel arrives in Phase 7. #}
+    {% include "hiring/partials/applicant_panel.html" with application=selected %}
   </div>
 {% endblock %}

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from hiring.views import candidates, dashboard, jobs, skills
+from hiring.views import candidates, dashboard, jobs, pipeline, skills
 
 app_name = "hiring"
 
@@ -20,6 +20,11 @@ urlpatterns = [
         "jobs/<int:pk>/applications/new/",
         jobs.application_create,
         name="application_create",
+    ),
+    path(
+        "applications/<int:pk>/panel/",
+        pipeline.application_panel,
+        name="application_panel",
     ),
     path("skills/", skills.skill_list, name="skill_list"),
     path("skills/new/", skills.skill_create, name="skill_create"),

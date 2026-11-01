@@ -81,11 +81,18 @@ class StageMoveForm(forms.Form):
     def clean_stage(self):
         # Checked against the stage as saved now, so a stale page's move is refused here.
         stage = self.cleaned_data["stage"]
-        current = self.application.stage
-        if stage != current and stage not in allowed_targets(current):
+        application = self.application
+        current = application.stage
+        if stage == current:
+            return stage
+        if stage not in allowed_targets(current, application.reopen_stage):
             raise forms.ValidationError(
-                f"Can't move {self.application.candidate} to {Stage(stage).label}: "
-                f"they're now in {self.application.get_stage_display()}."
+                f"Can't move {application.candidate} to {Stage(stage).label}: "
+                f"they're now in {application.get_stage_display()}."
+            )
+        if application.reopen_blocked:
+            raise forms.ValidationError(
+                application.REOPEN_BLOCKED_MESSAGE.format(candidate=application.candidate)
             )
         return stage
 

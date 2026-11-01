@@ -1,11 +1,41 @@
 import pytest
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.urls import reverse
 
 from hiring.forms import CandidateForm
 from hiring.models import Candidate
+from hiring.stages import Stage
 
 pytestmark = pytest.mark.django_db
+
+
+def test_archive_is_refused_while_candidate_has_active_applications(
+    candidate, make_job, make_application, staff_user
+):
+    backend = make_application(
+        candidate, make_job(title="Backend Developer"), stage=Stage.INTERVIEW
+    )
+    make_application(candidate, make_job(title="Data Analyst"), stage=Stage.REJECTED)
+    qa = make_application(candidate, make_job(title="QA Engineer"))
+
+    with pytest.raises(ValidationError) as excinfo:
+        candidate.archive()
+
+    message = excinfo.value.messages[0]
+    assert "Backend Developer" in message
+    assert "QA Engineer" in message
+    assert "Data Analyst" not in message
+    candidate.refresh_from_db()
+    assert not candidate.archived
+
+    # Once every application is finished, archiving goes through.
+    backend.move_to(Stage.WITHDRAWN, staff_user)
+    qa.move_to(Stage.REJECTED, staff_user)
+    candidate.archive()
+
+    candidate.refresh_from_db()
+    assert candidate.archived
 
 
 def listed(response):
@@ -184,6 +214,79 @@ def test_no_delete_action_for_candidates(staff_client, candidate):
         reverse("hiring:candidate_edit", args=[candidate.pk]),
     ):
         assert "delete" not in staff_client.get(url).content.decode().lower()
+
+
+def test_archive_from_detail_page_hides_candidate_from_default_list(staff_client, candidate):
+    response = staff_client.post(
+        reverse("hiring:candidate_archive", args=[candidate.pk]), headers={"HX-Request": "true"}
+    )
+
+    detail_url = reverse("hiring:candidate_detail", args=[candidate.pk])
+    assert response["HX-Redirect"] == detail_url
+    candidate.refresh_from_db()
+    assert candidate.archived
+    content = staff_client.get(detail_url).content.decode()
+    assert "Candidate “Ada Lovelace” archived." in content
+    assert reverse("hiring:candidate_unarchive", args=[candidate.pk]) in content
+    assert listed(staff_client.get(reverse("hiring:candidate_list"))) == set()
+
+
+def test_archive_button_asks_for_confirmation(staff_client, candidate):
+    content = staff_client.get(
+        reverse("hiring:candidate_detail", args=[candidate.pk])
+    ).content.decode()
+
+    assert f'hx-post="{reverse("hiring:candidate_archive", args=[candidate.pk])}"' in content
+    assert "hx-confirm=" in content
+
+
+def test_refused_archive_shows_error_toast_listing_active_applications(
+    staff_client, candidate, open_job, make_application
+):
+    make_application(candidate, open_job, stage=Stage.SCREENING)
+
+    response = staff_client.post(
+        reverse("hiring:candidate_archive", args=[candidate.pk]), follow=True
+    )
+
+    candidate.refresh_from_db()
+    assert not candidate.archived
+    content = response.content.decode()
+    assert "alert-error" in content
+    assert "Backend Developer (Screening)" in content
+
+
+def test_archiving_an_archived_candidate_changes_nothing(make_candidate):
+    archived = make_candidate(archived=True)
+
+    archived.archive()
+
+    archived.refresh_from_db()
+    assert archived.archived
+
+
+def test_unarchive_restores_candidate_to_default_list(staff_client, make_candidate):
+    archived = make_candidate(email="back@example.com", archived=True)
+
+    response = staff_client.post(
+        reverse("hiring:candidate_unarchive", args=[archived.pk]), follow=True
+    )
+
+    archived.refresh_from_db()
+    assert not archived.archived
+    assert "Candidate “First1 Last1” unarchived." in response.content.decode()
+    assert listed(staff_client.get(reverse("hiring:candidate_list"))) == {"back@example.com"}
+
+
+@pytest.mark.parametrize("name", ["hiring:candidate_archive", "hiring:candidate_unarchive"])
+def test_archive_actions_require_post_and_login(client, staff_client, candidate, name):
+    url = reverse(name, args=[candidate.pk])
+
+    assert staff_client.get(url).status_code == 405
+    client.logout()
+    response = client.post(url)
+    assert response.status_code == 302
+    assert response["Location"].startswith(reverse("login"))
 
 
 def test_list_rows_link_to_detail_and_edit(staff_client, candidate):

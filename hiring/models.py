@@ -5,7 +5,7 @@ from django.db.models import Max
 from django.db.models.functions import Coalesce, Lower
 from django.utils import timezone
 
-from hiring.stages import PROGRESS_STAGES, Stage, allowed_targets
+from hiring.stages import FINISHED_STAGES, PROGRESS_STAGES, Stage, allowed_targets
 
 
 class Skill(models.Model):
@@ -57,6 +57,23 @@ class Candidate(models.Model):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
+
+    def archive(self):
+        """Hide the candidate from the default list. Refused while any application is active."""
+        if self.archived:
+            return
+        active = self.applications.exclude(stage__in=FINISHED_STAGES).select_related("job")
+        if active:
+            jobs = ", ".join(f"{a.job} ({a.get_stage_display()})" for a in active)
+            raise ValidationError(f"Can't archive {self}: still active for {jobs}.")
+        self.archived = True
+        self.save(update_fields=["archived"])
+
+    def unarchive(self):
+        if not self.archived:
+            return
+        self.archived = False
+        self.save(update_fields=["archived"])
 
 
 class JobOpening(models.Model):
@@ -137,15 +154,19 @@ class Application(models.Model):
         # Only new applications are blocked; existing ones keep moving after a close.
         if self._state.adding and self.job_id and self.job.status == JobOpening.Status.CLOSED:
             raise ValidationError("This job is closed and isn't accepting new applications.")
+        if self._state.adding and self.candidate_id and self.candidate.archived:
+            raise ValidationError("This candidate is archived and can't apply to jobs.")
 
     def move_to(self, new_stage, user):
         """The one way to change stage. Returns the StageChange, or None for a same-stage move."""
         if new_stage == self.stage:
             return None
-        if new_stage not in allowed_targets(self.stage):
+        if new_stage not in allowed_targets(self.stage, self.reopen_stage):
             raise ValidationError(
                 f"Can't move from {self.get_stage_display()} to {Stage(new_stage).label}."
             )
+        if self.reopen_blocked:
+            raise ValidationError(self.REOPEN_BLOCKED_MESSAGE.format(candidate=self.candidate))
         with transaction.atomic():
             change = StageChange.objects.create(
                 application=self, from_stage=self.stage, to_stage=new_stage, changed_by=user
@@ -153,6 +174,22 @@ class Application(models.Model):
             self.stage = new_stage
             self.save(update_fields=["stage", "updated_at"])
         return change
+
+    @property
+    def reopen_stage(self):
+        """For Rejected or Withdrawn, the stage held just before; otherwise None."""
+        if self.stage not in (Stage.REJECTED, Stage.WITHDRAWN):
+            return None
+        # The latest change is the one that entered the current stage.
+        latest = self.stage_changes.first()
+        return latest.from_stage if latest else None
+
+    REOPEN_BLOCKED_MESSAGE = "Unarchive {candidate} before reopening this application."
+
+    @property
+    def reopen_blocked(self):
+        # Checked here, not in the pure stage rules, because it depends on candidate data.
+        return self.stage in (Stage.REJECTED, Stage.WITHDRAWN) and self.candidate.archived
 
     @property
     def days_in_stage(self):
@@ -165,9 +202,10 @@ class Application(models.Model):
 
     @property
     def progress_steps(self):
-        # Rejected and Withdrawn reach no step until history can tell where they left off.
+        # Rejected and Withdrawn show how far the application got before it ended.
         stages = list(PROGRESS_STAGES)
-        reached = stages.index(self.stage) if self.stage in stages else -1
+        current = self.reopen_stage or self.stage
+        reached = stages.index(current) if current in stages else -1
         return [{"label": stage.label, "reached": i <= reached} for i, stage in enumerate(stages)]
 
 

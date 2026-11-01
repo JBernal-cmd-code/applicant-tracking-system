@@ -7,6 +7,16 @@
     <h1 class="text-2xl font-semibold">{{ candidate }}</h1>
     {% if candidate.archived %}<span class="badge badge-ghost">Archived</span>{% endif %}
     <a href="{% url 'hiring:candidate_edit' candidate.pk %}" class="btn btn-outline btn-primary btn-sm">Edit</a>
+    {% if candidate.archived %}
+      <form method="post" action="{% url 'hiring:candidate_unarchive' candidate.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-ghost btn-sm text-success">Unarchive</button>
+      </form>
+    {% else %}
+      <button type="button" class="btn btn-ghost btn-sm text-error"
+              hx-post="{% url 'hiring:candidate_archive' candidate.pk %}"
+              hx-confirm="Archive “{{ candidate }}”? They'll be hidden from the default list and can't be added to new applications.">Archive</button>
+    {% endif %}
   </div>
   <div class="card bg-base-100 shadow-sm mt-6 max-w-2xl">
     <div class="card-body">

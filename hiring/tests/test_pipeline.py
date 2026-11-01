@@ -384,6 +384,125 @@ def test_move_to_records_one_stage_change_and_refuses_disallowed_moves(
     assert StageChange.objects.count() == 1
 
 
+@pytest.mark.parametrize("closed_as", [Stage.REJECTED, Stage.WITHDRAWN])
+def test_reopen_returns_application_to_the_stage_it_held_before(
+    candidate, open_job, make_application, staff_user, closed_as
+):
+    application = make_application(candidate, open_job, stage=Stage.FINAL_REVIEW)
+    application.move_to(closed_as, staff_user)
+
+    with pytest.raises(ValidationError):
+        application.move_to(Stage.APPLIED, staff_user)  # only the previous stage is allowed
+    application.move_to(Stage.FINAL_REVIEW, staff_user)
+
+    application.refresh_from_db()
+    assert application.stage == Stage.FINAL_REVIEW
+    latest = application.stage_changes.first()
+    assert (latest.from_stage, latest.to_stage, latest.changed_by) == (
+        closed_as,
+        Stage.FINAL_REVIEW,
+        staff_user,
+    )
+
+
+def test_reopen_is_refused_while_candidate_is_archived(
+    candidate, open_job, make_application, staff_user
+):
+    application = make_application(candidate, open_job, stage=Stage.SCREENING)
+    application.move_to(Stage.WITHDRAWN, staff_user)
+    candidate.archive()
+
+    with pytest.raises(ValidationError, match="Unarchive"):
+        application.move_to(Stage.SCREENING, staff_user)
+
+    application.refresh_from_db()
+    assert application.stage == Stage.WITHDRAWN
+    assert application.stage_changes.count() == 2
+
+
+def test_model_validation_refuses_application_from_archived_candidate(make_candidate, open_job):
+    application = Application(candidate=make_candidate(archived=True), job=open_job)
+
+    with pytest.raises(ValidationError, match="This candidate is archived"):
+        application.full_clean()
+
+
+def test_stale_submission_for_since_archived_candidate_is_refused(
+    staff_client, candidate, open_job
+):
+    candidate.archive()
+
+    response = staff_client.post(
+        reverse("hiring:application_create", args=[open_job.pk]),
+        {"candidate": candidate.pk, "notes": ""},
+    )
+
+    assert response.status_code == 200
+    assert "candidate" in response.context["form"].errors
+    assert not Application.objects.exists()
+
+
+def test_rejected_panel_shows_only_reopen_and_reopening_restores_stage(
+    staff_client, staff_user, candidate, open_job, make_application
+):
+    application = make_application(candidate, open_job, stage=Stage.INTERVIEW)
+    application.move_to(Stage.REJECTED, staff_user)
+
+    response = staff_client.get(reverse("hiring:application_panel", args=[application.pk]))
+
+    groups = {
+        group["title"]: [button["label"] for button in group["buttons"]]
+        for group in response.context["move_groups"]
+    }
+    assert groups == {"Reopen": ["Reopen to Interview"]}
+    move_url = reverse("hiring:application_move", args=[application.pk])
+    assert response.content.decode().count(f'hx-post="{move_url}"') == 1
+    reached = [step["label"] for step in application.progress_steps if step["reached"]]
+    assert reached == ["Applied", "Screening", "Interview"]
+
+    response = move(staff_client, application, Stage.INTERVIEW)
+
+    application.refresh_from_db()
+    assert application.stage == Stage.INTERVIEW
+    assert "Ada Lovelace moved from Rejected to Interview." in response.content.decode()
+
+
+def test_archived_candidate_panel_shows_badge_and_unarchive_note_instead_of_reopen(
+    staff_client, staff_user, candidate, open_job, make_application
+):
+    application = make_application(candidate, open_job, stage=Stage.SCREENING)
+    application.move_to(Stage.WITHDRAWN, staff_user)
+    candidate.archive()
+
+    response = staff_client.get(
+        reverse("hiring:job_detail", args=[open_job.pk]), {"application": application.pk}
+    )
+
+    assert response.context["move_groups"] == []
+    panel = response.content.decode().split('id="applicant-panel"')[1]
+    assert "Archived</span>" in panel
+    assert "Unarchive the candidate" in panel
+    assert "hx-post" not in panel
+
+
+def test_stale_reopen_for_archived_candidate_is_refused_with_error_toast(
+    staff_client, staff_user, candidate, open_job, make_application
+):
+    application = make_application(candidate, open_job, stage=Stage.SCREENING)
+    application.move_to(Stage.REJECTED, staff_user)
+    # The page still shows Reopen, but a colleague has since archived the candidate.
+    candidate.archive()
+
+    response = move(staff_client, application, Stage.SCREENING)
+
+    application.refresh_from_db()
+    assert response.status_code == 200
+    assert application.stage == Stage.REJECTED
+    toasts = response.content.decode().split('id="toasts"')[1]
+    assert "alert-error" in toasts
+    assert "Unarchive Ada Lovelace before reopening" in toasts
+
+
 def oob_ids(content):
     """The ids of elements marked for an out-of-band swap."""
     return set(re.findall(r'<[^>]*\bid="([^"]+)"[^>]*\bhx-swap-oob="true"', content))

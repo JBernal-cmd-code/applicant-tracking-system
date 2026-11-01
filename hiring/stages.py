@@ -26,6 +26,9 @@ PROGRESS_STAGES = (
     Stage.HIRED,
 )
 
+# An application in one of these is done; every other stage counts as active.
+FINISHED_STAGES = (Stage.HIRED, Stage.REJECTED, Stage.WITHDRAWN)
+
 
 class MoveKind(TextChoices):
     NEXT = "next"
@@ -33,6 +36,7 @@ class MoveKind(TextChoices):
     BACK = "back"
     REJECT = "reject"
     WITHDRAW = "withdraw"
+    REOPEN = "reopen"
 
 
 class Move(NamedTuple):
@@ -40,10 +44,15 @@ class Move(NamedTuple):
     kind: MoveKind
 
 
-def allowed_moves(stage):
-    """Every move an application in ``stage`` may make, in display order."""
-    if stage not in PROGRESS_STAGES or stage == Stage.HIRED:
-        # Hired is final; Rejected and Withdrawn wait for Reopen (Phase 9).
+def allowed_moves(stage, reopen_to=None):
+    """Every move an application in ``stage`` may make, in display order.
+
+    ``reopen_to`` is the stage held just before Rejected or Withdrawn, taken from
+    the application's history; it is the only way out of those two stages.
+    """
+    if stage in (Stage.REJECTED, Stage.WITHDRAWN):
+        return [Move(Stage(reopen_to), MoveKind.REOPEN)] if reopen_to else []
+    if stage == Stage.HIRED:
         return []
     i = PROGRESS_STAGES.index(stage)
     moves = []
@@ -58,6 +67,6 @@ def allowed_moves(stage):
     return moves
 
 
-def allowed_targets(stage):
+def allowed_targets(stage, reopen_to=None):
     """The stages an application in ``stage`` may move to."""
-    return frozenset(move.target for move in allowed_moves(stage))
+    return frozenset(move.target for move in allowed_moves(stage, reopen_to))

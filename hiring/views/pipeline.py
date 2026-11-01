@@ -11,6 +11,7 @@ MOVE_GROUPS = [
     ("Move forward", "Skipping stages is allowed. Hired only from Offer.", {"next", "skip"}),
     ("Fix a mistake", "Step back exactly one stage.", {"back"}),
     ("Close out", "Either side can end the process.", {"reject", "withdraw"}),
+    ("Reopen", "Returns the application to the stage it held before.", {"reopen"}),
 ]
 
 MOVE_LABELS = {
@@ -19,11 +20,15 @@ MOVE_LABELS = {
     MoveKind.BACK: "← Back to {}",
     MoveKind.REJECT: "Reject",
     MoveKind.WITHDRAW: "Withdrew",
+    MoveKind.REOPEN: "Reopen to {}",
 }
 
 
 def move_groups(application):
-    moves = allowed_moves(application.stage)
+    # An archived candidate's Reopen is replaced by the panel's unarchive-first note.
+    if application.reopen_blocked:
+        return []
+    moves = allowed_moves(application.stage, application.reopen_stage)
     groups = []
     for title, hint, kinds in MOVE_GROUPS:
         buttons = [

@@ -53,7 +53,7 @@
                 <div class="flex flex-wrap gap-2">
                   {% for button in group.buttons %}
                     <button type="button"
-                            class="btn btn-sm {% if button.kind == 'next' %}btn-primary{% elif button.kind == 'reject' %}btn-ghost text-error{% elif button.kind == 'withdraw' %}btn-ghost text-base-content/60{% else %}btn-ghost{% endif %}"
+                            class="btn btn-sm {% if button.kind == 'next' %}btn-primary{% elif button.kind == 'reopen' %}btn-outline btn-success{% elif button.kind == 'reject' %}btn-ghost text-error{% elif button.kind == 'withdraw' %}btn-ghost text-base-content/60{% else %}btn-ghost{% endif %}"
                             hx-post="{% url 'hiring:application_move' application.pk %}"
                             hx-vals='{"stage": "{{ button.stage }}"}'
                             hx-target="#applicant-panel" hx-swap="outerHTML"
@@ -62,7 +62,13 @@
                 </div>
               </div>
             {% empty %}
-              <p class="text-sm text-base-content/50">No moves available.</p>
+              {% if application.reopen_blocked %}
+                <div class="alert alert-soft alert-warning text-sm">
+                  <span>{{ candidate }} is archived. <a href="{% url 'hiring:candidate_detail' candidate.pk %}" class="link">Unarchive the candidate</a> first to reopen this application.</span>
+                </div>
+              {% else %}
+                <p class="text-sm text-base-content/50">No moves available.</p>
+              {% endif %}
             {% endfor %}
           </div>
         </div>

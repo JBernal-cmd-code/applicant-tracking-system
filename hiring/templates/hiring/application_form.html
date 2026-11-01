@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Add application{% endblock %}
+
+{% block content %}
+  <h1 class="text-2xl font-semibold">Add application to {{ job }}</h1>
+  <div class="card bg-base-100 shadow-sm mt-6 max-w-xl">
+    <form method="post" class="card-body gap-4" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div role="alert" class="alert alert-error text-sm">{{ form.non_field_errors|join:" " }}</div>
+      {% endif %}
+      {% with field=form.candidate %}
+        <div class="fieldset">
+          <label for="{{ field.id_for_label }}" class="fieldset-legend">{{ field.label }}</label>
+          {% if field.field.queryset.exists %}
+            <select name="{{ field.html_name }}" id="{{ field.id_for_label }}" class="select w-full{% if field.errors %} select-error{% endif %}" required autofocus>
+              {% for value, label in field.field.choices %}
+                <option value="{{ value }}" {% if field.value|stringformat:"s" == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          {% else %}
+            <p class="text-sm text-base-content/60">Every active candidate has already applied to this job. <a href="{% url 'hiring:candidate_create' %}" class="link">Add a candidate</a> first.</p>
+          {% endif %}
+          {% for error in field.errors %}
+            <span class="text-error text-sm">{{ error }}</span>
+          {% endfor %}
+        </div>
+      {% endwith %}
+      {% with field=form.notes %}
+        <div class="fieldset">
+          <label for="{{ field.id_for_label }}" class="fieldset-legend">{{ field.label }} <span class="font-normal text-base-content/60">(optional)</span></label>
+          <textarea name="{{ field.html_name }}" id="{{ field.id_for_label }}" rows="4" class="textarea w-full{% if field.errors %} textarea-error{% endif %}">{{ field.value|default:'' }}</textarea>
+          {% for error in field.errors %}
+            <span class="text-error text-sm">{{ error }}</span>
+          {% endfor %}
+        </div>
+      {% endwith %}
+      <p class="text-sm text-base-content/70">New applications start in Applied.</p>
+      <div class="flex gap-2">
+        <button type="submit" class="btn btn-primary">Add application</button>
+        <a href="{% url 'hiring:job_detail' job.pk %}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

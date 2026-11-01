@@ -16,6 +16,11 @@ urlpatterns = [
     path("jobs/<int:pk>/edit/", jobs.job_edit, name="job_edit"),
     path("jobs/<int:pk>/close/", jobs.job_close, name="job_close"),
     path("jobs/<int:pk>/reopen/", jobs.job_reopen, name="job_reopen"),
+    path(
+        "jobs/<int:pk>/applications/new/",
+        jobs.application_create,
+        name="application_create",
+    ),
     path("skills/", skills.skill_list, name="skill_list"),
     path("skills/new/", skills.skill_create, name="skill_create"),
     path("skills/<int:pk>/edit/", skills.skill_edit, name="skill_edit"),

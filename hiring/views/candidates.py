@@ -17,7 +17,12 @@ def candidate_list(request):
 
 def candidate_detail(request, pk):
     candidate = get_object_or_404(Candidate, pk=pk)
-    return render(request, "hiring/candidate_detail.html", {"candidate": candidate})
+    applications = candidate.applications.select_related("job")
+    return render(
+        request,
+        "hiring/candidate_detail.html",
+        {"candidate": candidate, "applications": applications},
+    )
 
 
 def candidate_create(request):

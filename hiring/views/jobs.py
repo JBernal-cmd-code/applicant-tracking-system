@@ -4,8 +4,9 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django_htmx.http import HttpResponseClientRedirect
 
-from hiring.forms import JobFilterForm, JobOpeningForm
+from hiring.forms import ApplicationForm, JobFilterForm, JobOpeningForm
 from hiring.models import JobOpening
+from hiring.stages import Stage
 
 
 def job_list(request):
@@ -16,7 +17,16 @@ def job_list(request):
 
 def job_detail(request, pk):
     job = get_object_or_404(JobOpening.objects.prefetch_related("skills"), pk=pk)
-    return render(request, "hiring/job_detail.html", {"job": job})
+    applications = job.applications.select_related("candidate")
+    stages = [{"value": stage.value, "label": stage.label, "applications": []} for stage in Stage]
+    by_value = {stage["value"]: stage for stage in stages}
+    for application in applications:
+        by_value[application.stage]["applications"].append(application)
+    return render(
+        request,
+        "hiring/job_detail.html",
+        {"job": job, "stages": stages, "has_applications": bool(applications)},
+    )
 
 
 def job_create(request):
@@ -36,6 +46,19 @@ def job_edit(request, pk):
         messages.success(request, f"Job opening “{job}” saved.")
         return redirect("hiring:job_detail", pk=job.pk)
     return render(request, "hiring/job_form.html", {"form": form, "job": job})
+
+
+def application_create(request, pk):
+    job = get_object_or_404(JobOpening, pk=pk)
+    if job.status == JobOpening.Status.CLOSED:
+        messages.error(request, f"Job opening “{job}” is closed to new applications.")
+        return redirect("hiring:job_detail", pk=job.pk)
+    form = ApplicationForm(request.POST or None, job=job)
+    if form.is_valid():
+        application = form.save()
+        messages.success(request, f"Application from “{application.candidate}” added.")
+        return redirect("hiring:job_detail", pk=job.pk)
+    return render(request, "hiring/application_form.html", {"form": form, "job": job})
 
 
 @require_POST

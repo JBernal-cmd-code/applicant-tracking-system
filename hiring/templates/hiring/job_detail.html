@@ -9,6 +9,9 @@
     {% if job.closed_at %}<span class="text-sm text-base-content/70">Closed on {{ job.closed_at|date:"M j, Y" }}</span>{% endif %}
     <a href="{% url 'hiring:job_edit' job.pk %}" class="btn btn-outline btn-primary btn-sm">Edit</a>
     {% include "hiring/partials/job_close_reopen_button.html" with btn_class="btn-outline btn-sm" %}
+    {% if job.status == "open" %}
+      <a href="{% url 'hiring:application_create' job.pk %}" class="btn btn-primary btn-sm">+ Add application</a>
+    {% endif %}
   </div>
   <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-base-content/70">
     <span>{{ job.department }}</span>
@@ -27,5 +30,11 @@
     <div class="collapse-title font-medium">Job description</div>
     <div class="collapse-content text-sm whitespace-pre-line">{{ job.description }}</div>
   </div>
-  {# The summary bar and applicant pipeline arrive in Phase 6. #}
+  <div class="mt-6">
+    {% include "hiring/partials/pipeline_summary.html" %}
+  </div>
+  <div class="grid lg:grid-cols-[320px_1fr] gap-6 mt-6">
+    {% include "hiring/partials/pipeline_list.html" %}
+    {# The applicant detail panel arrives in Phase 7. #}
+  </div>
 {% endblock %}

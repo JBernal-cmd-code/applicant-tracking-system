@@ -1,6 +1,9 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import Lower
 from django.utils import timezone
+
+from hiring.stages import Stage
 
 
 class Skill(models.Model):
@@ -95,3 +98,35 @@ class JobOpening(models.Model):
         self.status = self.Status.OPEN
         self.closed_at = None
         self.save(update_fields=["status", "closed_at", "updated_at"])
+
+
+class Application(models.Model):
+    candidate = models.ForeignKey(Candidate, on_delete=models.PROTECT, related_name="applications")
+    job = models.ForeignKey(JobOpening, on_delete=models.PROTECT, related_name="applications")
+    stage = models.CharField(max_length=20, choices=Stage, default=Stage.APPLIED)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["candidate", "job"],
+                name="unique_application_per_job",
+                violation_error_message="This candidate has already applied to this job.",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.candidate} for {self.job}"
+
+    def clean(self):
+        # Only new applications are blocked; existing ones keep moving after a close.
+        if self._state.adding and self.job_id and self.job.status == JobOpening.Status.CLOSED:
+            raise ValidationError("This job is closed and isn't accepting new applications.")
+
+    @property
+    def days_in_stage(self):
+        # Stage history arrives in Phase 8; until then the stage began at creation.
+        return (timezone.now() - self.created_at).days

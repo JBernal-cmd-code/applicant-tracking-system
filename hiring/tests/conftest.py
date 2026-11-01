@@ -2,7 +2,7 @@ import itertools
 
 import pytest
 
-from hiring.models import Candidate, JobOpening
+from hiring.models import Application, Candidate, JobOpening
 
 STAFF_PASSWORD = "correct-horse-battery"
 
@@ -66,3 +66,11 @@ def closed_job(make_job):
     job = make_job(title="Data Analyst")
     job.close()
     return job
+
+
+@pytest.fixture
+def make_application(db):
+    def make(candidate, job, **fields):
+        return Application.objects.create(candidate=candidate, job=job, **fields)
+
+    return make

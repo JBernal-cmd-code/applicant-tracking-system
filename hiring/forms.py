@@ -1,7 +1,7 @@
 from django import forms
 from django.db.models import Q
 
-from hiring.models import Candidate, JobOpening, Skill
+from hiring.models import Application, Candidate, JobOpening, Skill
 
 
 class SkillForm(forms.ModelForm):
@@ -46,6 +46,25 @@ class JobOpeningForm(forms.ModelForm):
         model = JobOpening
         fields = ["title", "department", "location", "employment_type", "description", "skills"]
         widgets = {"skills": forms.CheckboxSelectMultiple(attrs={"class": "checkbox checkbox-sm"})}
+
+
+class ApplicationForm(forms.ModelForm):
+    class Meta:
+        model = Application
+        fields = ["candidate", "notes"]
+        # A stale form can post a candidate that has since been filtered out below.
+        error_messages = {
+            "candidate": {
+                "invalid_choice": "This candidate is archived or has already applied to this job."
+            }
+        }
+
+    def __init__(self, *args, job, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instance.job = job
+        self.fields["candidate"].queryset = Candidate.objects.filter(archived=False).exclude(
+            applications__job=job
+        )
 
 
 class CandidateFilterForm(forms.Form):

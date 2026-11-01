@@ -1,0 +1,26 @@
+<div id="pipeline-list" class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if has_applications %}
+    <ul class="menu w-full p-3 gap-0.5">
+      {% for stage in stages %}
+        {% if stage.applications %}
+          <li class="menu-title flex-row items-center justify-between"><span>{{ stage.label }}</span><span>{{ stage.applications|length }}</span></li>
+          {% for application in stage.applications %}
+            {% with candidate=application.candidate %}
+              <li>
+                <a href="{% url 'hiring:candidate_detail' candidate.pk %}">
+                  <div class="avatar avatar-placeholder"><div class="bg-base-300 text-base-content w-7 rounded-full"><span class="text-xs font-semibold">{{ candidate.first_name|first|upper }}{{ candidate.last_name|first|upper }}</span></div></div>
+                  <span class="flex-1 truncate">{{ candidate }}</span>
+                  <span class="text-xs opacity-60">{% include "hiring/partials/days_in_stage.html" %}</span>
+                </a>
+              </li>
+            {% endwith %}
+          {% endfor %}
+        {% endif %}
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="card-body">
+      <p class="text-sm text-base-content/60">No applications yet.</p>
+    </div>
+  {% endif %}
+</div>

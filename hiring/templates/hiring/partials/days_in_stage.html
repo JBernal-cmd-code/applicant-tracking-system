@@ -1,0 +1,1 @@
+{% with days=application.days_in_stage %}{% if days == 0 %}today{% else %}{{ days }} day{{ days|pluralize }}{% endif %}{% endwith %}

@@ -24,4 +24,27 @@
       </dl>
     </div>
   </div>
+  <h2 class="text-lg font-semibold mt-8">Applications</h2>
+  <div class="card bg-base-100 shadow-sm mt-3 max-w-2xl">
+    {% if applications %}
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead><tr><th>Job</th><th>Stage</th><th>In stage</th></tr></thead>
+          <tbody>
+            {% for application in applications %}
+              <tr>
+                <td><a href="{% url 'hiring:job_detail' application.job.pk %}" class="link link-hover font-medium">{{ application.job }}</a></td>
+                <td>{% include "hiring/partials/stage_badge.html" with stage=application.stage label=application.get_stage_display %}</td>
+                <td class="text-sm text-base-content/70 whitespace-nowrap">{% include "hiring/partials/days_in_stage.html" %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body">
+        <p class="text-sm text-base-content/60">No applications yet. Add one from a job's page.</p>
+      </div>
+    {% endif %}
+  </div>
 {% endblock %}

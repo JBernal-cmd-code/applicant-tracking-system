@@ -1,0 +1,8 @@
+<div id="pipeline-summary" class="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% for stage in stages %}
+    <div class="bg-base-100 rounded-2xl border border-base-300 p-4" data-stage="{{ stage.value }}">
+      <div class="text-2xl font-bold">{{ stage.applications|length }}</div>
+      <div class="mt-1">{% include "hiring/partials/stage_badge.html" with stage=stage.value label=stage.label %}</div>
+    </div>
+  {% endfor %}
+</div>

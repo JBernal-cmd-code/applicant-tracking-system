@@ -28,6 +28,43 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-01 — Phase 6: Applications — add from the job page, pipeline list and summary bar (implement + TDD)
+
+### Prompts
+1. `/implement @prd/applicant-tracking-system.md @plans/applicant-tracking-system.md implement Phase 6. Show me the TDD candidates to approve first, then go through RED and GREEN without stopping unless something unexpected happens. Match the summary bar and grouped applicant list to option C in prototypes/pipeline-ui.html.`
+2. Apprved
+3. Verified in the browser, go ahead with PROMPTS.md, commit and push
+
+### Summary
+- **Outcome:** Phase 6 is built and committed.
+  - **Stages:** a new pure module, `hiring/stages.py`, holds the eight `Stage` choices. The transition rules come in Phase 8.
+  - **Model:** `Application` has PROTECT foreign keys to candidate and job, a unique (candidate, job) constraint, a stage defaulting to Applied, notes, and created/updated times. It's added in migration `0004_application`.
+    - `clean()` refuses a *new* application to a closed job. Existing applications on a closed job still validate.
+    - `days_in_stage` counts from the creation time until stage history arrives in Phase 8.
+  - **Form:** `ApplicationForm` is a ModelForm with candidate and notes. It takes the job from the view.
+    - The candidate queryset offers only active candidates who haven't applied to this job.
+    - A custom `invalid_choice` message explains why a stale submission is refused.
+  - **Pages:**
+    - **Add application:** `/jobs/<pk>/applications/new/` is a form page. On a closed job it redirects back with an error toast. The "+ Add application" button shows only on open jobs.
+    - **Job page:** a summary bar with eight count cards, and a grouped applicant list with stage headers, counts, initials avatars and days in stage. Both are partials (`pipeline_summary.html`, `pipeline_list.html`) with ids and an `oob` flag, ready for Phase 8.
+    - **Candidate page:** an Applications table showing job (linked), stage badge and days in stage.
+    - **Shared partials:** `stage_badge.html` and `days_in_stage.html`.
+  - **Fixtures:** `conftest.py` gained `make_application`.
+  - **Tests:** 18 new tests in `test_pipeline.py`, 3 of them TDD, for 104 in total.
+    - Ruff, `manage.py check` and the migrations check are clean.
+    - The user confirmed the manual browser checks.
+- **Deviations:**
+  - The user approved all three proposed TDD behaviors as listed: closed-job model validation, the form's candidate queryset, and the stale duplicate form error.
+  - **Prototype mismatch:** option C in the prototype has no summary bar. That bar comes from option B, as the PRD records. I used B's count cards without the click-to-filter behavior, plus C's grouped menu list. I pointed this out when I listed the TDD candidates, and the user didn't object.
+- **Sideways:**
+  - **All three REDs were honest assertion failures:**
+    - Behavior 3: "DID NOT RAISE ValidationError".
+    - Behavior 1: the archived candidate and the already-applied candidate were extra items in the queryset.
+    - Behavior 2: the stale submission was already refused, but with Django's generic "Select a valid choice" message, so the test failed on the message.
+  - **Simultaneous-submit race:** two submissions at exactly the same moment would both pass the form, and the second would hit the database constraint as a 500 error, not a form error. I flagged this but didn't handle it.
+  - **Temporary list links:** clicking an applicant in the pipeline list opens their candidate page until the Phase 7 detail panel replaces it. The right-hand pipeline column is empty for now.
+  - **Test cleanup:** I first wrote a test helper that created a second job by hand. I replaced it with the existing `make_job` fixture before running the tests.
+
 ## 2026-11-01 — Phase 5: Close and reopen jobs, and job list filters (implement + TDD)
 
 ### Prompts

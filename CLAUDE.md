@@ -8,9 +8,16 @@ Internal Django web app for logged-in hiring staff to track candidates, job open
 - Tailwind CSS + DaisyUI via django-tailwind-cli; HTMX for partial page updates.
 - Ruff for formatting and linting; pytest + pytest-django, configured in `pyproject.toml`.
 
+## Commands
+
+- Install and set up: `uv sync`, then `uv run python manage.py migrate`
+- Dev server with Tailwind watcher: `uv run python manage.py tailwind runserver`
+- Tests: `uv run pytest`
+- Lint and format: `uv run ruff check .` and `uv run ruff format .`
+
 ## Architecture decisions
 
-- One Django app holds all domain code. Stage choices and transition rules live in a pure stage-rules module with no database code.
+- The `hiring` app owns all domain code, with views and tests split into modules by area; `config` is the project package. Stage choices and transition rules live in a pure stage-rules module with no database code.
 - Every state change goes through a single model method (`move_to()`, `close()`/`reopen()`, `archive()`/`unarchive()`). Views stay thin.
 - No delete actions in the app; protected foreign keys guard hiring history.
 - Django's built-in auth and User model, one staff user type, login required on every view, no roles or object-level permissions.

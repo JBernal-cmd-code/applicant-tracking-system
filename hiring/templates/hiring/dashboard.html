@@ -4,10 +4,32 @@
 
 {% block content %}
   <h1 class="text-2xl font-semibold">Dashboard</h1>
-  <div class="card bg-base-100 shadow-sm mt-6">
-    <div class="card-body">
-      <h2 class="card-title text-base">Recent stage changes</h2>
-      <p class="text-base-content/60">No stage changes yet.</p>
-    </div>
+  <h2 class="text-lg font-semibold mt-6">Recent stage changes</h2>
+  <div class="card bg-base-100 shadow-sm mt-3">
+    {% if stage_changes %}
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead><tr><th>Candidate</th><th>Job</th><th>From</th><th>To</th><th>Moved by</th><th>When</th></tr></thead>
+          <tbody>
+            {% for change in stage_changes %}
+              {% with application=change.application %}
+                <tr>
+                  <td><a href="{% url 'hiring:job_detail' application.job.pk %}?application={{ application.pk }}" class="link link-hover font-medium">{{ application.candidate }}</a></td>
+                  <td>{{ application.job }}</td>
+                  <td>{% include "hiring/partials/stage_badge.html" with stage=change.from_stage label=change.get_from_stage_display %}</td>
+                  <td>{% include "hiring/partials/stage_badge.html" with stage=change.to_stage label=change.get_to_stage_display %}</td>
+                  <td>{{ change.changed_by.get_username }}</td>
+                  <td class="text-sm text-base-content/70 whitespace-nowrap" title="{{ change.changed_at }}">{{ change.changed_at|timesince }} ago</td>
+                </tr>
+              {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body">
+        <p class="text-base-content/60">No stage changes yet.</p>
+      </div>
+    {% endif %}
   </div>
 {% endblock %}

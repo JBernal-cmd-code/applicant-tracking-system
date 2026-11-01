@@ -28,6 +28,33 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-01 — Phase 10: Dashboard and demo data (implement + TDD)
+
+### Prompts
+1. `/implement @prd/applicant-tracking-system.md @plans/applicant-tracking-system.md implement Phase 10. Show me the TDD candidates to approve first, then go through RED and GREEN without stopping unless something unexpected happens.`
+2. Approved. Make sure the seed_demo command still gets a normal test that running it with --reset twice gives the same result.
+3. Sorry, that was an accidental interrupt. Please continue where you left off.
+4. Verified in the browser, it all passed
+
+### Summary
+- **Outcome:** Phase 10 is built and committed.
+  - **Dashboard:** shows the 25 newest `StageChange` rows, using `select_related` for the candidate, job and user so the number of queries stays fixed. The table shows candidate, job, from and to stage badges, who moved them, and how long ago. The candidate links to `/jobs/<pk>/?application=<id>`. With no data, it shows "No stage changes yet."
+  - **`seed_demo` command:**
+    - Creates 9 skills, 4 jobs (Project Coordinator closed), 20 candidates across all sources (Liam Williams archived) and 21 applications covering every stage, including a move back one stage and a Withdrawn → reopen.
+    - All history goes through `move_to()`. Timestamps are then backdated so days in stage look realistic.
+    - The acting user is the first superuser. If there isn't one, it creates a `demo` user with an unusable password.
+    - `--reset` deletes the hiring tables (children first, because of PROTECT). Without `--reset`, it refuses to run if hiring data already exists.
+  - **Tests:** 2 TDD tests (the 25 newest first, and the fixed query count) and 9 normal tests: dashboard entry details and link, the empty state, `--reset` twice giving the same result, `--reset` replacing data, refusing without `--reset`, coverage of every stage and source plus a closed job and an archived candidate, an unbroken history chain, and the acting user with and without a superuser. That makes 235 passing in total. Ruff is clean. The user confirmed the manual browser checks.
+- **Deviations:**
+  - The user approved both proposed TDD behaviors, and asked that `seed_demo` still get a normal test showing `--reset` twice gives the same result. It does.
+  - I didn't propose TDD for the demo command (seed data) or the entry links (the `?application=` pattern was already tested on the candidate page).
+- **Sideways:**
+  - **Accidental interrupt:** the user rejected the first write to the dashboard view by accident, then asked me to continue. I rewrote the same file unchanged.
+  - **Behavior 1's RED:** order was already newest first because of `StageChange.Meta.ordering`, so the test only failed on the limit (26 rows instead of 25). Newest-first order was in place before the test.
+  - **Not run on the dev database:** I didn't run `seed_demo` against the user's database myself, because `--reset` deletes hiring data. The user ran it during manual verification.
+  - **Formatting:** `ruff format` reformatted `seed_demo.py` after the tests passed.
+  - **Learned from Phase 9:** this log edit was made and checked before the commit, so the entry is part of the phase commit.
+
 ## 2026-11-01 — Phase 9: Archive candidates and reopen applicants (implement + TDD)
 
 ### Prompts

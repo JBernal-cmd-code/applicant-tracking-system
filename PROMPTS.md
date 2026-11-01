@@ -28,6 +28,31 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-01 — Phase 2: Skills (implement + TDD)
+
+### Prompts
+1. `/implement @prd/applicant-tracking-system.md @plans/applicant-tracking-system.md implement Phase 2`
+2. yes, approved
+3. yes, approved
+4. yes, move on to behavior 2
+5. Yes, that’s correct. Go ahead, and keep going through the rest of the phase unless something unexpected happens.
+6. All checks passed, go ahead and finish the phase
+
+### Summary
+- **Outcome:** Phase 2 is built and committed.
+  - **Model:** `Skill` has a case-insensitive unique constraint on `Lower("name")`, in a single `0001_initial` migration.
+  - **Form:** `SkillForm` is a ModelForm. Its `clean_name()` checks for case-insensitive duplicates, excluding the skill being edited.
+  - **Pages:** a Skills list, plus create and edit pages, all function views in `hiring/views/skills.py`. Successful saves show toasts. The sidebar Skills link is live. There is no delete action.
+  - **Tests:** 14 new tests, 2 of them TDD, for 21 in total. Ruff, `manage.py check` and the migrations check are clean. The user confirmed the manual browser checks.
+- **Deviations:**
+  - I proposed only two TDD behaviors, not three. I left the job count out because `JobOpening` doesn't exist until Phase 4. The user approved both.
+  - The user approved behavior 2's test and told me to finish the rest of the phase without stopping, so the green summary for behavior 2 and the normal tests weren't paused for review.
+- **Sideways:**
+  - **Constraint error placement:** behavior 2 went RED because Django reports an expression-based constraint (`Lower("name")`) as a form-wide `__all__` error instead of a field error. `clean_name()` fixed it. The database constraint stays as the final guard.
+  - **Migration replaced:** the first `0001_initial` migration was generated without the constraint so behavior 1 could fail. Since nothing had been committed or applied, I deleted it and regenerated it with the constraint.
+  - **Placeholder job count:** the list annotates `job_count` with a constant `Value(0)`, marked by a comment to become `Count("job_openings")` in Phase 4. The single-query criterion is covered by a test that the query count doesn't grow with the number of skills.
+  - **Test rewrite:** my first query-count test was muddled (it re-ran the queryset with an unused variable). Before running it, I replaced it with the comparison of query counts at one and five skills.
+
 ## 2026-11-01 — Phase 1: project skeleton, authentication and app shell (implement + TDD)
 
 ### Prompts

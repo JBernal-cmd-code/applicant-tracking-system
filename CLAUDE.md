@@ -1,0 +1,24 @@
+# Applicant Tracking System
+
+Internal Django web app for logged-in hiring staff to track candidates, job openings, and each application's progress through the hiring stages.
+
+## Stack
+
+- Python, Django, SQLite; **uv** is the package manager.
+- Tailwind CSS + DaisyUI via django-tailwind-cli; HTMX for partial page updates.
+- Ruff for formatting and linting; pytest + pytest-django, configured in `pyproject.toml`.
+
+## Architecture decisions
+
+- One Django app holds all domain code. Stage choices and transition rules live in a pure stage-rules module with no database code.
+- Every state change goes through a single model method (`move_to()`, `close()`/`reopen()`, `archive()`/`unarchive()`). Views stay thin.
+- No delete actions in the app; protected foreign keys guard hiring history.
+- Django's built-in auth and User model, one staff user type, login required on every view, no roles or object-level permissions.
+- App models are not registered in Django admin; admin is only for managing staff accounts.
+- Action feedback uses Django messages shown as DaisyUI toasts; HTMX responses update the toast area with an out-of-band swap.
+
+## References
+
+- PRD (requirements, models, rules, scope): `prd/applicant-tracking-system.md`
+- Implementation plan (phases, acceptance criteria): `plans/applicant-tracking-system.md`
+- Prototypes (reference only, not production code): `prototypes/`

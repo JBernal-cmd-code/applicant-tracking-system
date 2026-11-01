@@ -28,6 +28,32 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-01 — Initial CLAUDE.md for the ATS
+
+### Prompts
+1. Create the initial CLAUDE.md for this project.
+
+   Keep it to about 20-30 lines. Include only:
+   1. A one-line project description.
+   2. The approved technology stack and package manager.
+   3. Durable, project-wide architecture decisions already established in the PRD.
+   4. Short pointers to the PRD, plan, and prototypes instead of repeating their details.
+
+   Do not add commands yet because the project tooling has not been installed or verified.
+   Do not predict project structure, paths, template conventions, URL conventions, or testing commands that do not exist yet.
+   Do not copy business requirements, user stories, implementation phases, rejected alternatives, or detailed feature rules into CLAUDE.md.
+   Do not invent new architectural conventions.
+2. rite this session log to PROMPTS.md according to its instructions.
+
+### Summary
+- **Outcome:** `CLAUDE.md` at the repo root (about 25 lines), written after reading the PRD and plan.
+  - It has a one-line description, the stack with uv as the package manager, the PRD's durable architecture decisions, and pointers to the PRD, plan and `prototypes/`.
+  - It has no commands, URLs, template layout or feature rules. I left out the planned `config` and `hiring` package names because those packages don't exist yet.
+  - It is uncommitted.
+- **Deviations:** none. The user asked no follow-up questions.
+- **Sideways:**
+  - **Redundant bullet:** my draft had a separate bullet saying `move_to()` is the only way to change a stage and writes history in one transaction. That repeated the single-entry-point bullet and added a detailed feature rule the prompt excluded. The user removed it from the file directly after the session's first prompt.
+
 ## 2026-11-01 — Implementation plan for the ATS from the PRD (prd-to-plan)
 
 ### Prompts

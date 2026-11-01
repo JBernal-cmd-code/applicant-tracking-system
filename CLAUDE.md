@@ -29,3 +29,4 @@ Internal Django web app for logged-in hiring staff to track candidates, job open
 - PRD (requirements, models, rules, scope): `prd/applicant-tracking-system.md`
 - Implementation plan (phases, acceptance criteria): `plans/applicant-tracking-system.md`
 - Prototypes (reference only, not production code): `prototypes/`
+

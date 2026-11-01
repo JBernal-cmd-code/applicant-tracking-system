@@ -28,6 +28,32 @@ Each entry has this shape:
     - **Deviations:** recommendations overridden, follow-up questions asked
     - **Sideways:** failures, wrong turns, and how they were caught
 
+## 2026-11-01 — Phase 8: Stage moves (implement + TDD)
+
+### Prompts
+1. `/implement @prd/applicant-tracking-system.md @plans/applicant-tracking-system.md implement Phase 8. Show me the TDD candidates to approve first, then go through RED and GREEN without stopping unless something unexpected happens. Match the move card to option C in prototypes/pipeline-ui.html.`
+2. Approved. Make sure the parametrized test also covers Rejected and Withdrawn having no allowed moves for now, since Reopen comes in Phase 9.
+3. Verified in the browser, go ahead with PROMPTS.md, commit and push
+
+### Summary
+- **Outcome:** Phase 8 is built and committed.
+  - **Stage rules:** `hiring/stages.py` gained `allowed_moves()`, which lists each move with its kind (next, skip, back, reject, withdraw), and `allowed_targets()`. The module still has no database code.
+  - **Model:** a new `StageChange` model (migration `0005_stagechange`) with protected foreign keys to the application and to `changed_by`, ordered newest first.
+  - **`Application.move_to()`:** checks the rules, then saves the new stage and writes one StageChange together in a single transaction. A same-stage move does nothing, and a disallowed move raises `ValidationError`. It doesn't check job status.
+  - **Days in stage:** now count from the latest StageChange, else creation. Lists use the `with_stage_entered_at()` annotation, so there's no query per row.
+  - **Move form:** `StageMoveForm`, a plain form that checks the target against the stage as currently saved.
+  - **Move endpoint:** `POST /applications/<pk>/move/` returns the panel, plus out-of-band swaps for the list, summary bar and toasts. A successful move shows a success toast, an invalid or stale move returns 200 with an error toast, and a same-stage move shows no toast.
+  - **Panel:** matches option C. A "Move this application" card shows Move forward, Fix a mistake and Close out groups, or "No moves available." for Hired. The stage history timeline lists each change with who made it and when.
+  - **Test helper:** `make_application(stage=...)` now reaches later stages through `move_to()`.
+  - **Tests:** 3 TDD tests (the stage-pair test runs 64 cases) and 11 normal tests. That makes 192 passing in total. Ruff, `manage.py check` and the migrations check are clean. The user confirmed the manual browser checks.
+- **Deviations:**
+  - The user approved all three proposed TDD behaviors: every stage pair, `move_to()` history, and the stale-move HTMX response.
+  - The user asked that the parametrized test also assert that Rejected and Withdrawn have no allowed moves until Reopen arrives in Phase 9. It does.
+- **Sideways:**
+  - The first stage-rules run gave a pytest deprecation warning for passing `itertools.product` to `parametrize`. Wrapping it in `list()` fixed it; this was a mechanical repair with no change to what the test asserts.
+  - An existing candidate-page test failed once history existed. It faked a day in stage by backdating `created_at`, but its Final Review application now has a StageChange. Its setup now backdates the StageChange instead, and the assertion is unchanged.
+  - Rejected and Withdrawn panels still show the plain alert and an empty stepper. Saying "while in X" depends on the same history lookup as Reopen, so it's left for Phase 9.
+
 ## 2026-11-01 — Phase 7: Applicant detail panel, read-only (implement + TDD)
 
 ### Prompts

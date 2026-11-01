@@ -3,6 +3,7 @@ import itertools
 import pytest
 
 from hiring.models import Application, Candidate, JobOpening
+from hiring.stages import Stage
 
 STAFF_PASSWORD = "correct-horse-battery"
 
@@ -69,8 +70,13 @@ def closed_job(make_job):
 
 
 @pytest.fixture
-def make_application(db):
-    def make(candidate, job, **fields):
-        return Application.objects.create(candidate=candidate, job=job, **fields)
+def make_application(db, staff_user):
+    def make(candidate, job, stage=Stage.APPLIED, **fields):
+        # Later stages are reached through move_to(), so history exists like in the app.
+        application = Application.objects.create(candidate=candidate, job=job, **fields)
+        if stage == Stage.HIRED:
+            application.move_to(Stage.OFFER, staff_user)
+        application.move_to(stage, staff_user)
+        return application
 
     return make

@@ -2,6 +2,7 @@ from django import forms
 from django.db.models import Q
 
 from hiring.models import Application, Candidate, JobOpening, Skill
+from hiring.stages import Stage, allowed_targets
 
 
 class SkillForm(forms.ModelForm):
@@ -65,6 +66,28 @@ class ApplicationForm(forms.ModelForm):
         self.fields["candidate"].queryset = Candidate.objects.filter(archived=False).exclude(
             applications__job=job
         )
+
+
+class StageMoveForm(forms.Form):
+    stage = forms.ChoiceField(
+        choices=Stage.choices,
+        error_messages={"invalid_choice": "That isn't a hiring stage."},
+    )
+
+    def __init__(self, *args, application, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.application = application
+
+    def clean_stage(self):
+        # Checked against the stage as saved now, so a stale page's move is refused here.
+        stage = self.cleaned_data["stage"]
+        current = self.application.stage
+        if stage != current and stage not in allowed_targets(current):
+            raise forms.ValidationError(
+                f"Can't move {self.application.candidate} to {Stage(stage).label}: "
+                f"they're now in {self.application.get_stage_display()}."
+            )
+        return stage
 
 
 class CandidateFilterForm(forms.Form):

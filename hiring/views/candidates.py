@@ -17,7 +17,7 @@ def candidate_list(request):
 
 def candidate_detail(request, pk):
     candidate = get_object_or_404(Candidate, pk=pk)
-    applications = candidate.applications.select_related("job")
+    applications = candidate.applications.select_related("job").with_stage_entered_at()
     return render(
         request,
         "hiring/candidate_detail.html",

@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 
 import pytest
@@ -8,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hiring.forms import ApplicationForm
-from hiring.models import Application, Candidate
+from hiring.models import Application, Candidate, StageChange
 from hiring.stages import Stage
 
 pytestmark = pytest.mark.django_db
@@ -212,9 +213,7 @@ def test_candidate_page_lists_applications_with_job_stage_and_days(
     analyst = make_job(title="Data Analyst")
     make_application(candidate, backend)
     application = make_application(candidate, analyst, stage=Stage.FINAL_REVIEW)
-    Application.objects.filter(pk=application.pk).update(
-        created_at=timezone.now() - timedelta(days=1)
-    )
+    application.stage_changes.update(changed_at=timezone.now() - timedelta(days=1))
 
     content = staff_client.get(
         reverse("hiring:candidate_detail", args=[candidate.pk])
@@ -356,6 +355,218 @@ def test_job_page_ignores_application_parameter_not_on_this_job(
     assert response.context["selected"] is None
     assert "Foreign notes." not in content
     assert "Select an applicant to see their details." in content
+
+
+def test_move_to_records_one_stage_change_and_refuses_disallowed_moves(
+    candidate, open_job, make_application, staff_user
+):
+    application = make_application(candidate, open_job)
+
+    application.move_to(Stage.INTERVIEW, staff_user)
+    application.move_to(Stage.INTERVIEW, staff_user)  # same stage: nothing happens
+
+    application.refresh_from_db()
+    assert application.stage == Stage.INTERVIEW
+    change = StageChange.objects.get()
+    assert (change.application, change.from_stage, change.to_stage, change.changed_by) == (
+        application,
+        Stage.APPLIED,
+        Stage.INTERVIEW,
+        staff_user,
+    )
+    assert timezone.now() - change.changed_at < timedelta(minutes=1)
+
+    with pytest.raises(ValidationError):
+        application.move_to(Stage.HIRED, staff_user)  # Hired only from Offer
+
+    application.refresh_from_db()
+    assert application.stage == Stage.INTERVIEW
+    assert StageChange.objects.count() == 1
+
+
+def oob_ids(content):
+    """The ids of elements marked for an out-of-band swap."""
+    return set(re.findall(r'<[^>]*\bid="([^"]+)"[^>]*\bhx-swap-oob="true"', content))
+
+
+def test_stale_move_returns_fresh_panel_list_summary_and_error_toast(
+    staff_client, staff_user, candidate, open_job, make_application
+):
+    application = make_application(candidate, open_job)
+    # The page still shows Applied, but a colleague has since rejected the applicant.
+    application.move_to(Stage.REJECTED, staff_user)
+
+    response = staff_client.post(
+        reverse("hiring:application_move", args=[application.pk]),
+        {"stage": Stage.INTERVIEW},
+        headers={"HX-Request": "true"},
+    )
+
+    application.refresh_from_db()
+    assert response.status_code == 200
+    assert application.stage == Stage.REJECTED
+    assert StageChange.objects.count() == 1
+    content = response.content.decode()
+    assert content.lstrip().startswith('<div id="applicant-panel"')
+    assert {"pipeline-list", "pipeline-summary", "toasts"} <= oob_ids(content)
+    assert summary_counts(response)["rejected"] == 1
+    toasts = content.split('id="toasts"')[1]
+    assert "alert-error" in toasts
+    assert "Ada Lovelace to Interview" in toasts
+
+
+def move(client, application, stage):
+    return client.post(
+        reverse("hiring:application_move", args=[application.pk]),
+        {"stage": stage},
+        headers={"HX-Request": "true"},
+    )
+
+
+def test_move_updates_panel_list_and_summary_with_success_toast(
+    staff_client, candidate, open_job, make_application
+):
+    application = make_application(candidate, open_job)
+
+    response = move(staff_client, application, Stage.SCREENING)
+
+    application.refresh_from_db()
+    assert application.stage == Stage.SCREENING
+    content = response.content.decode()
+    assert content.lstrip().startswith('<div id="applicant-panel"')
+    assert {"pipeline-list", "pipeline-summary", "toasts"} <= oob_ids(content)
+    assert summary_counts(response)["applied"] == 0
+    assert summary_counts(response)["screening"] == 1
+    toasts = content.split('id="toasts"')[1]
+    assert "alert-success" in toasts
+    assert "Ada Lovelace moved from Applied to Screening." in toasts
+
+
+def test_same_stage_move_re_renders_without_toast_or_history(
+    staff_client, candidate, open_job, make_application
+):
+    application = make_application(candidate, open_job)
+
+    response = move(staff_client, application, Stage.APPLIED)
+
+    assert response.status_code == 200
+    assert not StageChange.objects.exists()
+    assert "toast-message" not in response.content.decode()
+
+
+def test_unknown_stage_is_refused_with_error_toast(
+    staff_client, candidate, open_job, make_application
+):
+    application = make_application(candidate, open_job)
+
+    response = move(staff_client, application, "promoted")
+
+    application.refresh_from_db()
+    assert application.stage == Stage.APPLIED
+    assert "That isn" in response.content.decode().split('id="toasts"')[1]
+
+
+def test_moves_work_on_closed_jobs(staff_client, candidate, open_job, make_application):
+    application = make_application(candidate, open_job, stage=Stage.OFFER)
+    open_job.close()
+
+    move(staff_client, application, Stage.HIRED)
+
+    application.refresh_from_db()
+    assert application.stage == Stage.HIRED
+
+
+def test_panel_shows_only_allowed_moves_in_three_groups(
+    staff_client, candidate, open_job, make_application
+):
+    application = make_application(candidate, open_job, stage=Stage.INTERVIEW)
+
+    response = staff_client.get(reverse("hiring:application_panel", args=[application.pk]))
+
+    groups = {
+        group["title"]: [button["label"] for button in group["buttons"]]
+        for group in response.context["move_groups"]
+    }
+    assert groups == {
+        "Move forward": ["Advance to Final Review", "Skip to Offer"],
+        "Fix a mistake": ["← Back to Screening"],
+        "Close out": ["Reject", "Withdrew"],
+    }
+    content = response.content.decode()
+    move_url = reverse("hiring:application_move", args=[application.pk])
+    assert content.count(f'hx-post="{move_url}"') == 5
+    assert "Hired only from Offer." in content
+
+
+def test_hired_panel_offers_no_moves(staff_client, candidate, open_job, make_application):
+    application = make_application(candidate, open_job, stage=Stage.HIRED)
+
+    response = staff_client.get(reverse("hiring:application_panel", args=[application.pk]))
+
+    assert response.context["move_groups"] == []
+    content = response.content.decode()
+    assert "hx-post" not in content
+    assert "No moves available." in content
+
+
+def test_days_in_stage_count_from_latest_stage_change(
+    staff_client, candidate, open_job, make_application
+):
+    application = make_application(candidate, open_job, stage=Stage.SCREENING)
+    Application.objects.filter(pk=application.pk).update(
+        created_at=timezone.now() - timedelta(days=10)
+    )
+    application.stage_changes.update(changed_at=timezone.now() - timedelta(days=4))
+
+    response = staff_client.get(reverse("hiring:job_detail", args=[open_job.pk]))
+
+    [listed] = [a for stage in response.context["stages"] for a in stage["applications"]]
+    assert listed.days_in_stage == 4
+    application.refresh_from_db()
+    assert application.days_in_stage == 4  # same answer without the list's annotation
+
+
+def test_history_timeline_shows_each_change_with_who_made_it(
+    staff_client, staff_user, candidate, open_job, make_application
+):
+    application = make_application(candidate, open_job, stage=Stage.SCREENING)
+    application.move_to(Stage.INTERVIEW, staff_user)
+
+    response = staff_client.get(reverse("hiring:application_panel", args=[application.pk]))
+
+    assert [(c.from_stage, c.to_stage) for c in response.context["stage_changes"]] == [
+        (Stage.SCREENING, Stage.INTERVIEW),
+        (Stage.APPLIED, Stage.SCREENING),
+    ]
+    assert response.content.decode().count(f"{staff_user.username} · ") == 2
+
+
+def test_stage_changes_protect_their_author_from_deletion(
+    staff_user, candidate, open_job, make_application
+):
+    make_application(candidate, open_job, stage=Stage.SCREENING)
+
+    with pytest.raises(ProtectedError):
+        staff_user.delete()
+
+
+def test_move_requires_post(staff_client, candidate, open_job, make_application):
+    application = make_application(candidate, open_job)
+
+    response = staff_client.get(reverse("hiring:application_move", args=[application.pk]))
+
+    assert response.status_code == 405
+
+
+def test_move_requires_login(client, candidate, open_job, make_application):
+    application = make_application(candidate, open_job)
+
+    response = move(client, application, Stage.SCREENING)
+
+    application.refresh_from_db()
+    assert response.status_code == 302
+    assert response["Location"].startswith(reverse("login"))
+    assert application.stage == Stage.APPLIED
 
 
 def test_candidate_page_without_applications_says_so(staff_client, candidate):

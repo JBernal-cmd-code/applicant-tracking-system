@@ -42,16 +42,49 @@
           </div>
         </div>
       </div>
-      <div class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm">
-        <div class="card-body">
-          <h3 class="font-semibold mb-2">Stage history</h3>
-          <ul class="flex flex-col gap-4">
-            {# Stage changes are recorded from Phase 8; until then only the starting entry exists. #}
-            <li class="flex gap-3">
-              <div class="w-2 h-2 mt-2 rounded-full bg-base-300 shrink-0"></div>
-              <div class="text-sm">Applied via {{ candidate.get_source_display }}<div class="text-xs text-base-content/60 mt-1">{{ application.created_at|date:"M j, Y" }}</div></div>
-            </li>
-          </ul>
+      <div class="grid xl:grid-cols-2 gap-6">
+        <div class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm">
+          <div class="card-body gap-5" id="move-card">
+            <h3 class="font-semibold">Move this application</h3>
+            {% for group in move_groups %}
+              <div>
+                <div class="text-sm font-medium">{{ group.title }}</div>
+                <div class="text-xs text-base-content/60 mb-2">{{ group.hint }}</div>
+                <div class="flex flex-wrap gap-2">
+                  {% for button in group.buttons %}
+                    <button type="button"
+                            class="btn btn-sm {% if button.kind == 'next' %}btn-primary{% elif button.kind == 'reject' %}btn-ghost text-error{% elif button.kind == 'withdraw' %}btn-ghost text-base-content/60{% else %}btn-ghost{% endif %}"
+                            hx-post="{% url 'hiring:application_move' application.pk %}"
+                            hx-vals='{"stage": "{{ button.stage }}"}'
+                            hx-target="#applicant-panel" hx-swap="outerHTML"
+                            hx-disabled-elt="#move-card button">{{ button.label }}</button>
+                  {% endfor %}
+                </div>
+              </div>
+            {% empty %}
+              <p class="text-sm text-base-content/50">No moves available.</p>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm">
+          <div class="card-body">
+            <h3 class="font-semibold mb-2">Stage history</h3>
+            <ul class="flex flex-col gap-4">
+              {% for change in stage_changes %}
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 mt-2 rounded-full bg-primary shrink-0"></div>
+                  <div class="text-sm">
+                    <div>{% include "hiring/partials/stage_badge.html" with stage=change.from_stage label=change.get_from_stage_display size="badge-xs" %} → {% include "hiring/partials/stage_badge.html" with stage=change.to_stage label=change.get_to_stage_display size="badge-xs" %}</div>
+                    <div class="text-xs text-base-content/60 mt-1">{{ change.changed_by.get_full_name|default:change.changed_by.username }} · {{ change.changed_at|date:"M j, Y, g:i a" }}</div>
+                  </div>
+                </li>
+              {% endfor %}
+              <li class="flex gap-3">
+                <div class="w-2 h-2 mt-2 rounded-full bg-base-300 shrink-0"></div>
+                <div class="text-sm">Applied via {{ candidate.get_source_display }}<div class="text-xs text-base-content/60 mt-1">{{ application.created_at|date:"M j, Y" }}</div></div>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
     {% endwith %}

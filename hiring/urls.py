@@ -26,6 +26,11 @@ urlpatterns = [
         pipeline.application_panel,
         name="application_panel",
     ),
+    path(
+        "applications/<int:pk>/move/",
+        pipeline.application_move,
+        name="application_move",
+    ),
     path("skills/", skills.skill_list, name="skill_list"),
     path("skills/new/", skills.skill_create, name="skill_create"),
     path("skills/<int:pk>/edit/", skills.skill_edit, name="skill_edit"),

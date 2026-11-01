@@ -1,9 +1,11 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
-from django.db.models.functions import Lower
+from django.db import models, transaction
+from django.db.models import Max
+from django.db.models.functions import Coalesce, Lower
 from django.utils import timezone
 
-from hiring.stages import PROGRESS_STAGES, Stage
+from hiring.stages import PROGRESS_STAGES, Stage, allowed_targets
 
 
 class Skill(models.Model):
@@ -100,6 +102,14 @@ class JobOpening(models.Model):
         self.save(update_fields=["status", "closed_at", "updated_at"])
 
 
+class ApplicationQuerySet(models.QuerySet):
+    def with_stage_entered_at(self):
+        """When each application entered its current stage: its latest change, else creation."""
+        return self.annotate(
+            stage_entered_at=Coalesce(Max("stage_changes__changed_at"), "created_at")
+        )
+
+
 class Application(models.Model):
     candidate = models.ForeignKey(Candidate, on_delete=models.PROTECT, related_name="applications")
     job = models.ForeignKey(JobOpening, on_delete=models.PROTECT, related_name="applications")
@@ -107,6 +117,8 @@ class Application(models.Model):
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = ApplicationQuerySet.as_manager()
 
     class Meta:
         ordering = ["created_at"]
@@ -126,10 +138,30 @@ class Application(models.Model):
         if self._state.adding and self.job_id and self.job.status == JobOpening.Status.CLOSED:
             raise ValidationError("This job is closed and isn't accepting new applications.")
 
+    def move_to(self, new_stage, user):
+        """The one way to change stage. Returns the StageChange, or None for a same-stage move."""
+        if new_stage == self.stage:
+            return None
+        if new_stage not in allowed_targets(self.stage):
+            raise ValidationError(
+                f"Can't move from {self.get_stage_display()} to {Stage(new_stage).label}."
+            )
+        with transaction.atomic():
+            change = StageChange.objects.create(
+                application=self, from_stage=self.stage, to_stage=new_stage, changed_by=user
+            )
+            self.stage = new_stage
+            self.save(update_fields=["stage", "updated_at"])
+        return change
+
     @property
     def days_in_stage(self):
-        # Stage history arrives in Phase 8; until then the stage began at creation.
-        return (timezone.now() - self.created_at).days
+        # Lists annotate stage_entered_at (see with_stage_entered_at) to avoid a query per row.
+        entered = getattr(self, "stage_entered_at", None)
+        if entered is None:
+            latest = self.stage_changes.first()
+            entered = latest.changed_at if latest else self.created_at
+        return (timezone.now() - entered).days
 
     @property
     def progress_steps(self):
@@ -137,3 +169,21 @@ class Application(models.Model):
         stages = list(PROGRESS_STAGES)
         reached = stages.index(self.stage) if self.stage in stages else -1
         return [{"label": stage.label, "reached": i <= reached} for i, stage in enumerate(stages)]
+
+
+class StageChange(models.Model):
+    application = models.ForeignKey(
+        Application, on_delete=models.PROTECT, related_name="stage_changes"
+    )
+    from_stage = models.CharField(max_length=20, choices=Stage)
+    to_stage = models.CharField(max_length=20, choices=Stage)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="stage_changes"
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-changed_at", "-pk"]
+
+    def __str__(self):
+        return f"{self.application}: {self.from_stage} → {self.to_stage}"

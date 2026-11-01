@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage Rules Prototype</title>
+<!-- THROWAWAY PROTOTYPE: not production code. Open by double-clicking. -->
+<style>
+  :root {
+    --bg: #f7f7f8; --card: #ffffff; --ink: #1d1d22; --muted: #6b6b76; --line: #e3e3e8;
+    --accent: #4f46e5; --accent-soft: #eef0ff;
+    --ok: #157f3b; --ok-soft: #e8f6ee; --bad: #b42318; --bad-soft: #fdecea;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 0 0 12px; }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+  p { margin: 0 0 10px; }
+  .lede { color: var(--muted); max-width: 820px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  section { margin-top: 24px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 820px) { .cols { grid-template-columns: 1fr; } }
+  .rules { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+  .pipe { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; color: var(--muted); background: #fff; }
+  .chip.current { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .chip.allowed { background: var(--accent-soft); border-color: #c9ccff; color: var(--accent); }
+  .exitrow { margin-top: 6px; }
+  .result { margin-top: 14px; padding: 10px 12px; border-radius: 8px; font-size: 14px; background: #f2f2f4; color: var(--muted); }
+  .result.ok { background: var(--ok-soft); color: var(--ok); }
+  .result.bad { background: var(--bad-soft); color: var(--bad); }
+  .result b { display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  tr.fresh td { background: #fffbe6; }
+  .empty { color: var(--muted); font-size: 13px; font-style: italic; }
+  button { font: inherit; font-size: 14px; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line);
+           background: #fff; color: var(--ink); cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { color: #fff; filter: brightness(1.08); }
+  .btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 14px; }
+  .tabs button.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .steps { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+  .steps li { display: flex; align-items: center; gap: 10px; }
+  .steps .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px;
+              background: #f0f0f3; color: var(--muted); flex: none; }
+  .steps li.done .n { background: var(--ok-soft); color: var(--ok); }
+  .steps li.next .n { background: var(--accent); color: #fff; }
+  .watch { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+  .tag { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+
+  <h1>Hiring stage rules: Option C vs Option D</h1>
+  <p class="lede">
+    <strong>The question:</strong> when staff move an application between hiring stages, which moves should the system allow?
+    Every button below is applied to <em>two identical applications at once</em>: one following Option C's rules, one following Option D's.
+    Watch where they agree and where they split. Refused moves change nothing and are not written to the history.
+  </p>
+
+  <section class="cols" id="columns"></section>
+
+  <section class="card">
+    <h2>Free play</h2>
+    <p class="tag">Each button tries the same action on both applications.</p>
+    <div class="btnrow" id="freeplay"></div>
+  </section>
+
+  <section class="card">
+    <h2>Guided walkthroughs</h2>
+    <p class="tag">Picking a walkthrough resets both applications to "Applied". Press the steps in order.</p>
+    <div class="tabs" id="tabs"></div>
+    <div id="walk"></div>
+  </section>
+
+</main>
+
+<script>
+/* ---------- Pure logic: no DOM in here ---------- */
+const StageRules = (() => {
+  const PROGRESS = ["Applied", "Screening", "Interview", "Final Review", "Offer", "Hired"];
+  const EXITS = ["Rejected", "Withdrawn"];
+  const ALL = [...PROGRESS, ...EXITS];
+  const isExit = s => EXITS.includes(s);
+  const pos = s => PROGRESS.indexOf(s);
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+  const newApplication = () => ({ stage: "Applied", history: [] });
+
+  // The stage the applicant was in right before entering the current one (read from history).
+  function previousStage(app) {
+    for (let i = app.history.length - 1; i >= 0; i--) {
+      if (app.history[i].to === app.stage) return app.history[i].from;
+    }
+    return null;
+  }
+
+  function forwardOrExit(app, to) {
+    if (isExit(to)) return { ok: true, to, what: to === "Rejected" ? "Rejected by the company" : "Candidate withdrew" };
+    const from = pos(app.stage), target = pos(to);
+    if (target === from + 1) return { ok: true, to, what: "Moved forward one stage" };
+    if (target > from) return { ok: true, to, what: `Skipped forward (passed over ${plural(target - from - 1, "stage")})` };
+    return null; // backward move: each option decides
+  }
+
+  const rulesets = {
+    C: {
+      name: "Option C (Guided)",
+      summary: [
+        "Forward to any later stage (skipping is allowed).",
+        "Back exactly one stage, to fix a mistake.",
+        "Reject or Withdraw from any active stage.",
+        "Hired is final.",
+        "Rejected / Withdrawn can be Reopened to the stage they were in before.",
+      ],
+      check(app, action) {
+        if (action.type === "reopen") {
+          if (!isExit(app.stage)) return { ok: false, why: "Nothing to reopen. This application is still active." };
+          const prev = previousStage(app);
+          return { ok: true, to: prev, what: `Reopened (back to ${prev}, where they were before)` };
+        }
+        const to = action.to;
+        if (to === app.stage) return { ok: false, why: `Already in ${to}. Nothing to change.` };
+        if (app.stage === "Hired") return { ok: false, why: "Hired is final. This application can no longer move." };
+        if (isExit(app.stage)) return { ok: false, why: `${app.stage} applications can't be moved directly. Use Reopen to return them to ${previousStage(app)}.` };
+        const fwd = forwardOrExit(app, to);
+        if (fwd) return fwd;
+        if (pos(to) === pos(app.stage) - 1) return { ok: true, to, what: "Stepped back one stage (fixing a mistake)" };
+        return { ok: false, why: `Option C only allows stepping back one stage. From ${app.stage} you can only go back to ${PROGRESS[pos(app.stage) - 1]}.` };
+      },
+    },
+    D: {
+      name: "Option D (Simpler)",
+      summary: [
+        "Forward to any later stage (skipping is allowed).",
+        "Back to any earlier stage.",
+        "Reject or Withdraw from any active stage.",
+        "Hired, Rejected and Withdrawn are all final.",
+        "There is no Reopen.",
+      ],
+      check(app, action) {
+        if (action.type === "reopen") {
+          if (!isExit(app.stage)) return { ok: false, why: "Nothing to reopen. This application is still active." };
+          return { ok: false, why: `Option D has no Reopen. ${app.stage} is final.` };
+        }
+        const to = action.to;
+        if (to === app.stage) return { ok: false, why: `Already in ${to}. Nothing to change.` };
+        if (app.stage === "Hired" || isExit(app.stage)) return { ok: false, why: `${app.stage} is final in Option D. This application can no longer move.` };
+        const fwd = forwardOrExit(app, to);
+        if (fwd) return fwd;
+        return { ok: true, to, what: `Moved back ${plural(pos(app.stage) - pos(to), "stage")}` };
+      },
+    },
+  };
+
+  // move_to(): the single place a stage change happens. Writes a history row only if allowed.
+  function apply(rulesetKey, app, action, user) {
+    const verdict = rulesets[rulesetKey].check(app, action);
+    if (!verdict.ok) return { app, verdict };
+    const row = { from: app.stage, to: verdict.to, by: user, what: verdict.what };
+    return { app: { stage: verdict.to, history: [...app.history, row] }, verdict };
+  }
+
+  function allowedFrom(rulesetKey, app) {
+    const moves = ALL.filter(to => rulesets[rulesetKey].check(app, { type: "move", to }).ok);
+    const canReopen = rulesets[rulesetKey].check(app, { type: "reopen" }).ok;
+    return { moves, canReopen };
+  }
+
+  return { PROGRESS, EXITS, ALL, rulesets, newApplication, apply, allowedFrom, previousStage };
+})();
+
+/* ---------- Page shell ---------- */
+const USER = "Demo staff user";
+const KEYS = ["C", "D"];
+let state;
+
+function reset() {
+  state = {};
+  for (const k of KEYS) state[k] = { app: StageRules.newApplication(), last: null };
+}
+
+function dispatch(action) {
+  const label = action.type === "reopen" ? "Reopen" : `Move to ${action.to}`;
+  for (const k of KEYS) {
+    const { app, verdict } = StageRules.apply(k, state[k].app, action, USER);
+    state[k] = { app, last: { label, ...verdict } };
+  }
+  render();
+}
+
+function chip(stage, app, allowed) {
+  const cls = stage === app.stage ? "current" : allowed.moves.includes(stage) ? "allowed" : "";
+  return `<span class="chip ${cls}">${stage}</span>`;
+}
+
+function renderColumn(k) {
+  const rs = StageRules.rulesets[k];
+  const { app, last } = state[k];
+  const allowed = StageRules.allowedFrom(k, app);
+  const result = !last
+    ? `<div class="result">Fresh application, currently in <b>Applied</b></div>`
+    : last.ok
+      ? `<div class="result ok"><b>✓ Allowed: ${last.label}</b>${last.what}. Now in ${app.stage}.</div>`
+      : `<div class="result bad"><b>✗ Refused: ${last.label}</b>${last.why} Still in ${app.stage}.</div>`;
+  const allowedText = [...allowed.moves, ...(allowed.canReopen ? [`Reopen → ${StageRules.previousStage(app)}`] : [])];
+  const rows = app.history.map((h, i) => `
+    <tr class="${last && last.ok && i === app.history.length - 1 ? "fresh" : ""}">
+      <td>${i + 1}</td><td>${h.from}</td><td>${h.to}</td><td>${h.what}</td><td>${h.by}</td>
+    </tr>`).join("");
+  return `
+    <div class="card">
+      <h2>${rs.name}</h2>
+      <ul class="rules">${rs.summary.map(s => `<li>${s}</li>`).join("")}</ul>
+
+      <h3>Current stage</h3>
+      <div class="pipe">${StageRules.PROGRESS.map(s => chip(s, app, allowed)).join("")}</div>
+      <div class="pipe exitrow">${StageRules.EXITS.map(s => chip(s, app, allowed)).join("")}</div>
+      ${result}
+
+      <h3>Allowed from here</h3>
+      ${allowedText.length ? `<div class="pipe">${allowedText.map(s => `<span class="chip allowed">${s}</span>`).join("")}</div>`
+                           : `<p class="empty">Nothing. This application is locked.</p>`}
+
+      <h3>Stage change history</h3>
+      ${rows ? `<table><thead><tr><th>#</th><th>From</th><th>To</th><th>What happened</th><th>By</th></tr></thead><tbody>${rows}</tbody></table>`
+             : `<p class="empty">No stage changes yet.</p>`}
+    </div>`;
+}
+
+/* ---------- Walkthroughs ---------- */
+const mv = to => ({ label: `Move to ${to}`, action: { type: "move", to } });
+const reopen = { label: "Reopen", action: { type: "reopen" } };
+
+const WALKS = [
+  { title: "Skip forward",
+    desc: "A strong referral should go straight to Interview without Screening, and later straight to Offer.",
+    watch: "Both options allow skipping forward. The history records how many stages were skipped.",
+    steps: [mv("Interview"), mv("Offer")] },
+  { title: "Step back to fix a mistake",
+    desc: "A recruiter accidentally moves the applicant to Final Review instead of keeping them in Interview, then fixes it. Next they try to jump back two stages to Screening.",
+    watch: "Both allow the one-step fix. They split on the two-step jump back: C refuses, D allows. Does anyone actually need to go back more than one stage?",
+    steps: [mv("Screening"), mv("Interview"), mv("Final Review"), mv("Interview"), mv("Screening")] },
+  { title: "Reject, then reopen",
+    desc: "The applicant reaches Interview and is rejected. Then the team changes its mind.",
+    watch: "Both refuse moving a rejected applicant directly to another stage. Reopen is where they split: C restores them to Interview (read from history), D refuses because Rejected is final.",
+    steps: [mv("Screening"), mv("Interview"), mv("Rejected"), mv("Offer"), reopen] },
+  { title: "Move a hired applicant",
+    desc: "The applicant is hired. Then someone tries to move them back, reject them, and reopen them.",
+    watch: "Hired is final in both options, so all three attempts are refused and the history stays unchanged.",
+    steps: [mv("Interview"), mv("Offer"), mv("Hired"), mv("Screening"), mv("Rejected"), reopen] },
+  { title: "Move to the same stage",
+    desc: "The applicant is in Screening and someone clicks Screening again (for example, a double click or a stale page).",
+    watch: "Both refuse with 'Already in Screening' and no history row is written. Should this be an error message, or should it be silently ignored?",
+    steps: [mv("Screening"), mv("Screening")] },
+];
+
+let walk = { index: null, step: 0 };
+
+function startWalk(i) { reset(); walk = { index: i, step: 0 }; render(); }
+function doStep(i) {
+  const w = WALKS[walk.index];
+  if (i !== walk.step) return;
+  walk.step++;
+  dispatch(w.steps[i].action);
+}
+
+function renderWalk() {
+  document.getElementById("tabs").innerHTML = WALKS.map((w, i) =>
+    `<button class="${walk.index === i ? "active" : ""}" onclick="startWalk(${i})">${i + 1}. ${w.title}</button>`).join("");
+  const el = document.getElementById("walk");
+  if (walk.index === null) { el.innerHTML = `<p class="empty">Pick a walkthrough above.</p>`; return; }
+  const w = WALKS[walk.index];
+  const done = walk.step >= w.steps.length;
+  el.innerHTML = `
+    <p>${w.desc}</p>
+    <div class="watch"><strong>Watch for:</strong> ${w.watch}</div>
+    <ol class="steps">
+      ${w.steps.map((s, i) => {
+        const cls = i < walk.step ? "done" : i === walk.step ? "next" : "";
+        return `<li class="${cls}"><span class="n">${i < walk.step ? "✓" : i + 1}</span>
+          <button ${i === walk.step ? 'class="primary"' : "disabled"} onclick="doStep(${i})">${s.label}</button></li>`;
+      }).join("")}
+    </ol>
+    <div class="btnrow" style="margin-top:14px">
+      <button onclick="startWalk(${walk.index})">Restart this walkthrough</button>
+      ${done ? `<span class="tag" style="align-self:center">Walkthrough complete. Compare the two histories above.</span>` : ""}
+    </div>`;
+}
+
+function renderFreeplay() {
+  const btns = StageRules.ALL.map(s => `<button onclick='dispatch({type:"move",to:${JSON.stringify(s)}})'>Move to ${s}</button>`);
+  btns.push(`<button onclick='dispatch({type:"reopen"})'>Reopen</button>`);
+  btns.push(`<button class="primary" onclick="walk={index:null,step:0};reset();render()">Reset both</button>`);
+  document.getElementById("freeplay").innerHTML = btns.join("");
+}
+
+function render() {
+  document.getElementById("columns").innerHTML = KEYS.map(renderColumn).join("");
+  renderWalk();
+}
+
+reset();
+renderFreeplay();
+render();
+</script>
+</body>
+</html>

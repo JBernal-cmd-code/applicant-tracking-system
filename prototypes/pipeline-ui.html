@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline UI Prototype</title>
+<!-- THROWAWAY PROTOTYPE: not production code. Open by double-clicking. Needs internet for the CDN. -->
+<link href="https://cdn.jsdelivr.net/npm/daisyui@5.0.0/daisyui.css" rel="stylesheet" type="text/css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.0.0"></script>
+<style>
+  /* Prototype switcher: deliberately NOT DaisyUI so it stays visually separate from the designs. */
+  #switcher { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 100;
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 999px;
+    background: #111; color: #fff; font: 13px/1 ui-monospace, Menlo, Consolas, monospace;
+    box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+  #switcher button { background: #2a2a2a; color: #fff; border: 0; border-radius: 999px; padding: 6px 10px;
+    font: inherit; cursor: pointer; }
+  #switcher button:hover { background: #3a3a3a; }
+  #switcher .sep { width: 1px; height: 18px; background: #444; }
+</style>
+</head>
+<body class="bg-base-200 min-h-screen">
+
+<div class="flex min-h-screen">
+  <!-- Sidebar (shared by all variants) -->
+  <aside class="hidden md:flex w-64 shrink-0 flex-col bg-base-100 border-r border-base-300">
+    <div class="px-6 py-5 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-primary text-primary-content grid place-items-center font-bold">A</div>
+      <div>
+        <div class="font-semibold leading-tight">Applicant Tracking</div>
+        <div class="text-xs text-base-content/60">Internal hiring</div>
+      </div>
+    </div>
+    <ul class="menu w-full px-3 gap-1">
+      <li><a>Dashboard</a></li>
+      <li><a class="menu-active">Pipeline</a></li>
+      <li><a>Candidates</a></li>
+      <li><a>Job openings</a></li>
+      <li><a>Skills</a></li>
+    </ul>
+    <div class="px-6 mt-6 mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50">Open jobs</div>
+    <ul class="menu w-full px-3 gap-1">
+      <li><a class="menu-active">Senior Backend Engineer</a></li>
+      <li><a class="text-base-content/60">Product Designer</a></li>
+      <li><a class="text-base-content/60">Data Analyst</a></li>
+    </ul>
+    <div class="mt-auto p-4 border-t border-base-300 flex items-center gap-3">
+      <div class="avatar avatar-placeholder"><div class="bg-neutral text-neutral-content w-9 rounded-full"><span class="text-xs">ST</span></div></div>
+      <div class="flex-1 text-sm"><div class="font-medium">Staff user</div><div class="text-base-content/60 text-xs">Log out</div></div>
+    </div>
+  </aside>
+
+  <main class="flex-1 min-w-0 p-4 md:p-8 pb-24">
+    <!-- Job header (shared) -->
+    <div class="text-sm breadcrumbs text-base-content/60 py-0 mb-2"><ul><li>Job openings</li><li>Senior Backend Engineer</li></ul></div>
+    <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Senior Backend Engineer</h1>
+        <div class="flex flex-wrap items-center gap-2 mt-2 text-sm text-base-content/70">
+          <span class="badge badge-success badge-soft">Open</span>
+          <span>Engineering</span><span>·</span><span>Austin, TX</span><span>·</span><span>Full-time</span>
+        </div>
+        <div class="flex flex-wrap gap-2 mt-3">
+          <span class="badge badge-outline badge-sm">Python</span>
+          <span class="badge badge-outline badge-sm">Django</span>
+          <span class="badge badge-outline badge-sm">PostgreSQL</span>
+          <span class="badge badge-outline badge-sm">REST APIs</span>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-ghost btn-sm">Edit job</button>
+        <button class="btn btn-primary btn-sm">+ Add application</button>
+      </div>
+    </div>
+
+    <div id="variant"></div>
+  </main>
+</div>
+
+<div class="toast toast-end toast-top z-50" id="toasts"></div>
+
+<div id="switcher">
+  <button onclick="cycle(-1)" title="Previous (←)">◀</button>
+  <span id="switcher-label"></span>
+  <button onclick="cycle(1)" title="Next (→)">▶</button>
+  <span class="sep"></span>
+  <button onclick="resetData()">Reset data</button>
+</div>
+
+<script>
+/* ---------- Stage rules (the decided Option C, with Hired only from Offer) ---------- */
+const PROGRESS = ["Applied", "Screening", "Interview", "Final Review", "Offer", "Hired"];
+const EXITS = ["Rejected", "Withdrawn"];
+const BADGE = {
+  "Applied": "badge-neutral", "Screening": "badge-info", "Interview": "badge-primary",
+  "Final Review": "badge-secondary", "Offer": "badge-warning", "Hired": "badge-success",
+  "Rejected": "badge-error", "Withdrawn": "badge-ghost",
+};
+
+function previousStage(app) {
+  for (let i = app.history.length - 1; i >= 0; i--) if (app.history[i].to === app.stage) return app.history[i].from;
+  return null;
+}
+
+function allowedMoves(app) {
+  const s = app.stage, i = PROGRESS.indexOf(s);
+  if (s === "Hired") return [];
+  if (EXITS.includes(s)) { const p = previousStage(app); return p ? [{ to: p, kind: "reopen" }] : []; }
+  const out = [];
+  for (let j = i + 1; j < PROGRESS.length; j++) {
+    const to = PROGRESS[j];
+    if (to === "Hired" && s !== "Offer") continue;           // Hired only from Offer
+    out.push({ to, kind: j === i + 1 ? "next" : "skip" });
+  }
+  if (i > 0) out.push({ to: PROGRESS[i - 1], kind: "back" }); // back exactly one
+  out.push({ to: "Rejected", kind: "reject" }, { to: "Withdrawn", kind: "withdraw" });
+  return out;
+}
+
+const moveLabel = m => ({
+  next: `Advance to ${m.to}`, skip: `Skip to ${m.to}`, back: `← Back to ${m.to}`,
+  reject: "Reject", withdraw: "Withdrew", reopen: `Reopen → ${m.to}`,
+}[m.kind]);
+
+/* ---------- Fake data (in memory only) ---------- */
+function seed() {
+  const a = (id, first, last, source, stage, appliedDaysAgo, history = []) =>
+    ({ id, first, last, email: `${first}.${last}@example.com`.toLowerCase().replace(/[^a-z.@]/g, ""),
+       source, stage, appliedDaysAgo, history });
+  const h = (from, to, daysAgo) => ({ from, to, daysAgo, by: "Staff user" });
+  return [
+    a(1, "Priya", "Patel", "Referral", "Applied", 1),
+    a(2, "Marcus", "Johnson", "Job Board", "Applied", 2),
+    a(3, "Lena", "Fischer", "Website", "Applied", 4),
+    a(4, "Daniel", "Kim", "Job Board", "Screening", 9, [h("Applied", "Screening", 5)]),
+    a(5, "Aisha", "Bello", "Website", "Screening", 8, [h("Applied", "Screening", 3)]),
+    a(6, "Tom", "Becker", "Other", "Screening", 11, [h("Applied", "Screening", 7)]),
+    a(7, "Sofia", "Hernandez", "Referral", "Interview", 15, [h("Applied", "Screening", 12), h("Screening", "Interview", 6)]),
+    a(8, "Kenji", "Watanabe", "Job Board", "Interview", 14, [h("Applied", "Screening", 10), h("Screening", "Interview", 4)]),
+    a(9, "Omar", "Haddad", "Website", "Interview", 13, [h("Applied", "Interview", 2)]),
+    a(10, "Grace", "Oneill", "Referral", "Final Review", 21, [h("Applied", "Screening", 18), h("Screening", "Interview", 10), h("Interview", "Final Review", 3)]),
+    a(11, "Jamal", "Wright", "Job Board", "Final Review", 20, [h("Applied", "Screening", 17), h("Screening", "Interview", 9), h("Interview", "Final Review", 2)]),
+    a(12, "Mei", "Chen", "Referral", "Offer", 25, [h("Applied", "Screening", 22), h("Screening", "Interview", 15), h("Interview", "Final Review", 8), h("Final Review", "Offer", 1)]),
+    a(13, "Lucas", "Silva", "Website", "Hired", 34, [h("Applied", "Screening", 30), h("Screening", "Interview", 24), h("Interview", "Final Review", 16), h("Final Review", "Offer", 10), h("Offer", "Hired", 5)]),
+    a(14, "Hannah", "Novak", "Job Board", "Rejected", 19, [h("Applied", "Screening", 16), h("Screening", "Interview", 9), h("Interview", "Rejected", 2)]),
+    a(15, "Elena", "Rossi", "Other", "Withdrawn", 12, [h("Applied", "Screening", 8), h("Screening", "Withdrawn", 3)]),
+  ];
+}
+
+let apps = seed();
+const ui = { filter: "All", selected: 7 };
+
+/* ---------- Actions ---------- */
+function moveTo(id, to) {
+  const app = apps.find(x => x.id === id);
+  if (app.stage === to) return;                                    // same stage: quietly do nothing
+  const move = allowedMoves(app).find(m => m.to === to);
+  if (!move) return toast(`Not allowed: ${app.stage} → ${to}`, "alert-error");
+  app.history.push({ from: app.stage, to, daysAgo: 0, by: "Staff user" });
+  const from = app.stage;
+  app.stage = to;
+  toast(`${app.first} ${app.last}: ${from} → ${to}`, to === "Rejected" ? "alert-error" : "alert-success");
+  render();
+}
+
+function toast(text, cls) {
+  const el = document.createElement("div");
+  el.className = `alert ${cls} shadow-lg text-sm`;
+  el.textContent = text;
+  document.getElementById("toasts").appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+
+function resetData() { apps = seed(); ui.filter = "All"; ui.selected = 7; toast("Data reset", "alert-info"); render(); }
+
+/* ---------- Small view helpers ---------- */
+const name = a => `${a.first} ${a.last}`;
+const initials = a => a.first[0] + a.last[0];
+const badge = (stage, size = "badge-sm") => `<span class="badge badge-soft ${BADGE[stage]} ${size} whitespace-nowrap">${stage}</span>`;
+const daysInStage = a => a.history.length ? a.history[a.history.length - 1].daysAgo : a.appliedDaysAgo;
+const ago = d => d === 0 ? "today" : d === 1 ? "1 day" : `${d} days`;
+const avatar = (a, size = "w-9") =>
+  `<div class="avatar avatar-placeholder"><div class="bg-base-300 text-base-content ${size} rounded-full"><span class="text-xs font-semibold">${initials(a)}</span></div></div>`;
+const byStage = s => apps.filter(a => a.stage === s);
+
+function btnClass(kind, size = "btn-xs") {
+  return {
+    next: `btn ${size} btn-primary`, skip: `btn ${size} btn-ghost`, back: `btn ${size} btn-ghost`,
+    reject: `btn ${size} btn-ghost text-error`, withdraw: `btn ${size} btn-ghost text-base-content/60`,
+    reopen: `btn ${size} btn-outline btn-primary`,
+  }[kind];
+}
+const moveBtn = (a, m, size) => `<button class="${btnClass(m.kind, size)}" onclick="moveTo(${a.id}, '${m.to}')">${moveLabel(m)}</button>`;
+
+/* ---------- Variant A: Kanban board ---------- */
+function kanban() {
+  const card = a => {
+    const moves = allowedMoves(a);
+    const next = moves.find(m => m.kind === "next");
+    const rest = moves.filter(m => m !== next);
+    return `
+      <div class="card bg-base-100 shadow-sm border border-base-300 rounded-2xl">
+        <div class="card-body p-4 gap-3">
+          <div class="flex items-center gap-3">
+            ${avatar(a)}
+            <div class="min-w-0">
+              <div class="font-medium truncate">${name(a)}</div>
+              <div class="text-xs text-base-content/60">${a.source} · ${ago(daysInStage(a))} in stage</div>
+            </div>
+          </div>
+          ${next ? moveBtn(a, next, "btn-sm") : ""}
+          ${rest.length ? `<div class="flex flex-wrap gap-1 -mx-1">${rest.map(m => moveBtn(a, m)).join("")}</div>` : ""}
+          ${!moves.length ? `<div class="text-xs text-success font-medium">Final: hired</div>` : ""}
+        </div>
+      </div>`;
+  };
+  const columns = PROGRESS.map(s => `
+    <div class="w-72 shrink-0 bg-base-300/40 rounded-2xl p-3 flex flex-col gap-3">
+      <div class="flex items-center justify-between px-1">
+        ${badge(s, "badge-md")}
+        <span class="text-sm text-base-content/60">${byStage(s).length}</span>
+      </div>
+      ${byStage(s).map(card).join("") || `<div class="text-sm text-base-content/40 text-center py-6 border border-dashed border-base-300 rounded-xl">No applicants</div>`}
+    </div>`).join("");
+  const closed = apps.filter(a => EXITS.includes(a.stage));
+  return `
+    <div class="flex gap-4 overflow-x-auto pb-4">${columns}</div>
+    <div class="collapse collapse-arrow bg-base-100 border border-base-300 rounded-2xl mt-4">
+      <input type="checkbox" ${ui.closedOpen ? "checked" : ""} onchange="ui.closedOpen=this.checked">
+      <div class="collapse-title font-medium">Closed out <span class="badge badge-sm ml-2">${closed.length}</span>
+        <span class="text-sm text-base-content/60 font-normal ml-2">Rejected and withdrawn</span></div>
+      <div class="collapse-content">
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          ${closed.map(a => `
+            <div class="flex items-center gap-3 p-3 rounded-xl border border-base-300">
+              ${avatar(a)}
+              <div class="flex-1 min-w-0"><div class="font-medium truncate">${name(a)}</div>
+                <div class="mt-1">${badge(a.stage)} <span class="text-xs text-base-content/60">from ${previousStage(a)}</span></div></div>
+              ${allowedMoves(a).map(m => moveBtn(a, m)).join("")}
+            </div>`).join("") || `<p class="text-sm text-base-content/50">Nobody closed out yet.</p>`}
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ---------- Variant B: Table with stage filters + summary bar ---------- */
+function table() {
+  const filters = ["All", "Active", ...PROGRESS, ...EXITS];
+  const matches = a => ui.filter === "All" ? true
+    : ui.filter === "Active" ? !EXITS.includes(a.stage) && a.stage !== "Hired" : a.stage === ui.filter;
+  const rows = apps.filter(matches);
+  const count = f => apps.filter(a => f === "All" ? true : f === "Active" ? !EXITS.includes(a.stage) && a.stage !== "Hired" : a.stage === f).length;
+  const summary = [...PROGRESS, ...EXITS].map(s => `
+    <button onclick="ui.filter='${s}';render()"
+      class="text-left bg-base-100 rounded-2xl border p-4 transition hover:shadow-md ${ui.filter === s ? "border-primary ring-2 ring-primary/30" : "border-base-300"}">
+      <div class="text-2xl font-bold">${byStage(s).length}</div>
+      <div class="mt-1">${badge(s)}</div>
+    </button>`).join("");
+  return `
+    <div class="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3 mb-6">${summary}</div>
+    <div class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm">
+      <div class="card-body p-0">
+        <div class="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-base-300">
+          <div role="tablist" class="tabs tabs-box tabs-sm">
+            ${filters.map(f => `<a role="tab" class="tab ${ui.filter === f ? "tab-active" : ""}" onclick="ui.filter='${f}';render()">${f} <span class="ml-1 opacity-60">${count(f)}</span></a>`).join("")}
+          </div>
+          <input class="input input-sm w-56" placeholder="Search candidates…" disabled>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead><tr><th>Candidate</th><th>Source</th><th>Stage</th><th>In stage</th><th>Move to</th></tr></thead>
+            <tbody>
+              ${rows.map(a => `
+                <tr class="hover:bg-base-200/50">
+                  <td><div class="flex items-center gap-3">${avatar(a)}<div><div class="font-medium">${name(a)}</div><div class="text-xs text-base-content/60">${a.email}</div></div></div></td>
+                  <td class="text-sm">${a.source}</td>
+                  <td>${badge(a.stage)}</td>
+                  <td class="text-sm text-base-content/70 whitespace-nowrap">${ago(daysInStage(a))}</td>
+                  <td><div class="flex flex-wrap gap-1">${allowedMoves(a).map(m => moveBtn(a, m)).join("") || `<span class="text-xs text-base-content/50">Final</span>`}</div></td>
+                </tr>`).join("") || `<tr><td colspan="5" class="text-center py-10 text-base-content/50">No applicants in this filter.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ---------- Variant C: Review queue (list + detail with history) ---------- */
+function review() {
+  if (!apps.some(a => a.id === ui.selected)) ui.selected = apps[0].id;
+  const sel = apps.find(a => a.id === ui.selected);
+  const groups = [...PROGRESS, ...EXITS].map(s => {
+    const list = byStage(s);
+    if (!list.length) return "";
+    return `
+      <li class="menu-title flex-row items-center justify-between"><span>${s}</span><span>${list.length}</span></li>
+      ${list.map(a => `
+        <li><a class="${a.id === sel.id ? "menu-active" : ""}" onclick="ui.selected=${a.id};render()">
+          ${avatar(a, "w-7")}<span class="flex-1 truncate">${name(a)}</span>
+          <span class="text-xs opacity-60">${ago(daysInStage(a))}</span></a></li>`).join("")}`;
+  }).join("");
+
+  const moves = allowedMoves(sel);
+  const group = (title, hint, kinds) => {
+    const ms = moves.filter(m => kinds.includes(m.kind));
+    if (!ms.length) return "";
+    return `<div><div class="text-sm font-medium">${title}</div><div class="text-xs text-base-content/60 mb-2">${hint}</div>
+      <div class="flex flex-wrap gap-2">${ms.map(m => moveBtn(sel, m, "btn-sm")).join("")}</div></div>`;
+  };
+  const reached = EXITS.includes(sel.stage) ? PROGRESS.indexOf(previousStage(sel)) : PROGRESS.indexOf(sel.stage);
+  const timeline = [...sel.history].reverse().map(h => `
+    <li class="flex gap-3">
+      <div class="w-2 h-2 mt-2 rounded-full bg-primary shrink-0"></div>
+      <div class="text-sm"><div>${badge(h.from, "badge-xs")} → ${badge(h.to, "badge-xs")}</div>
+        <div class="text-xs text-base-content/60 mt-1">${h.by} · ${h.daysAgo === 0 ? "today" : ago(h.daysAgo) + " ago"}</div></div>
+    </li>`).join("");
+
+  return `
+    <div class="grid lg:grid-cols-[320px_1fr] gap-6">
+      <div class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm">
+        <ul class="menu w-full p-3 gap-0.5">${groups}</ul>
+      </div>
+
+      <div class="flex flex-col gap-6">
+        <div class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm">
+          <div class="card-body gap-5">
+            <div class="flex flex-wrap items-center gap-4">
+              ${avatar(sel, "w-14")}
+              <div class="flex-1">
+                <h2 class="text-xl font-semibold">${name(sel)}</h2>
+                <div class="text-sm text-base-content/60">${sel.email} · via ${sel.source} · applied ${ago(sel.appliedDaysAgo)} ago</div>
+              </div>
+              ${badge(sel.stage, "badge-lg")}
+            </div>
+            <ul class="steps steps-horizontal w-full text-xs">
+              ${PROGRESS.map((s, i) => `<li class="step ${i <= reached ? (EXITS.includes(sel.stage) ? "step-neutral" : "step-primary") : ""}">${s}</li>`).join("")}
+            </ul>
+            ${EXITS.includes(sel.stage) ? `<div class="alert alert-soft ${sel.stage === "Rejected" ? "alert-error" : ""} text-sm">${sel.stage} while in ${previousStage(sel)}.</div>` : ""}
+            ${sel.stage === "Hired" ? `<div class="alert alert-soft alert-success text-sm">Hired. This application is final and can't be moved.</div>` : ""}
+          </div>
+        </div>
+
+        <div class="grid xl:grid-cols-2 gap-6">
+          <div class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm">
+            <div class="card-body gap-5">
+              <h3 class="font-semibold">Move this application</h3>
+              ${group("Move forward", "Skipping stages is allowed. Hired only from Offer.", ["next", "skip"])}
+              ${group("Fix a mistake", "Step back exactly one stage.", ["back"])}
+              ${group("Close out", "Either side can end the process.", ["reject", "withdraw"])}
+              ${group("Reopen", "Return to the stage they were in before.", ["reopen"])}
+              ${!moves.length ? `<p class="text-sm text-base-content/50">No moves available.</p>` : ""}
+            </div>
+          </div>
+          <div class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm">
+            <div class="card-body">
+              <h3 class="font-semibold mb-2">Stage history</h3>
+              <ul class="flex flex-col gap-4">
+                ${timeline}
+                <li class="flex gap-3"><div class="w-2 h-2 mt-2 rounded-full bg-base-300 shrink-0"></div>
+                  <div class="text-sm">Applied via ${sel.source}<div class="text-xs text-base-content/60 mt-1">${ago(sel.appliedDaysAgo)} ago</div></div></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ---------- Variant switcher ---------- */
+const VARIANTS = [
+  { key: "A", name: "Kanban board", render: kanban },
+  { key: "B", name: "Table + summary bar", render: table },
+  { key: "C", name: "Review queue (list + detail)", render: review },
+];
+let current = 0;
+try { const saved = localStorage.getItem("pipeline-variant"); if (saved !== null) current = +saved % VARIANTS.length; } catch (e) {}
+
+function cycle(dir) {
+  current = (current + dir + VARIANTS.length) % VARIANTS.length;
+  try { localStorage.setItem("pipeline-variant", current); } catch (e) {}
+  render();
+}
+document.addEventListener("keydown", e => {
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+
+function render() {
+  const v = VARIANTS[current];
+  document.getElementById("switcher-label").textContent = `${v.key} · ${v.name}`;
+  document.getElementById("variant").innerHTML = v.render();
+}
+render();
+</script>
+</body>
+</html>
